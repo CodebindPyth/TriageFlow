@@ -213,6 +213,20 @@ wc -l triageflow-results/20261011-115310/wordlist-candidates.txt
 
 Το `.local` συνήθως ανήκει σε εσωτερικό/lab namespace, οπότε το Subfinder μπορεί να μην επιστρέψει παθητικά subdomains από δημόσιες πηγές. Επίσης, το ότι ένα όνομα απαντά στο DNS δεν σημαίνει ότι έχει web service· αυτό ελέγχεται στο επόμενο στάδιο με httpx.
 
+### Απευθείας VHost brute-force χωρίς dnsx
+
+Αν θέλεις να δοκιμάζεις τα ονόματα απευθείας μέσω HTTP Host header, χωρίς να περάσουν πρώτα από DNS resolution με το dnsx, χρησιμοποίησε το ξεχωριστό script `vhost_direct.py`. Χρειάζεται το ffuf, όχι το dnsx ή το Subfinder.
+
+```bash
+python3 vhost_direct.py \
+  -u http://inlanefreight.local/ \
+  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-110000.txt \
+  --rate 100 \
+  --max-time 120
+```
+
+Το wordlist πρέπει να έχει ένα label ανά γραμμή (π.χ. admin, dev, portal). Το URL βάσης πρέπει να είναι προσβάσιμο από το Kali. Πριν στείλει αιτήματα, το script ζητά επιβεβαίωση εξουσιοδότησης. Τα αποτελέσματα αποθηκεύονται σε νέο timestamped φάκελο κάτω από `triageflow-results/`: `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt` και `ffuf-vhost.log`. Είναι ξεχωριστά από το `live.txt` του βασικού pipeline.
+
 ### Virtual-host discovery όταν η DNS αναζήτηση επιστρέφει μηδέν
 
 Σε ορισμένα lab περιβάλλοντα, όπως το `inlanefreight.local`, ο web server μπορεί να εξυπηρετεί διαφορετικές εφαρμογές ανάλογα με το HTTP `Host` header, παρότι τα αντίστοιχα ονόματα δεν έχουν ξεχωριστές DNS εγγραφές. Σε αυτήν την περίπτωση το DNS wordlist δεν αρκεί.
