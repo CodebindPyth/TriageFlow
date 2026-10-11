@@ -166,9 +166,9 @@ python3 triageflow.py -u example.com --no-login-check --no-cve-lookup
 
 ## 6. Εργαλεία και εγκατάσταση
 
-Το Python μέρος χρησιμοποιεί standard library και δεν χρειάζεται `pip install -r requirements.txt` για να τρέξει. Ωστόσο, το pipeline χρησιμοποιεί ξεχωριστά εκτελέσιμα εργαλεία: ProjectDiscovery `httpx`, `subfinder`, `nuclei` και `gowitness`.
+Το Python μέρος χρησιμοποιεί standard library και δεν χρειάζεται `pip install -r requirements.txt` για να τρέξει. Για screenshots χρειάζεται επίσης εγκατεστημένο Chrome ή Chromium. Η v2 εμφανίζει προειδοποίηση πριν ξεκινήσει αν έχεις επιλέξει screenshots αλλά δεν βρίσκει browser στο `PATH`. Ωστόσο, το pipeline χρησιμοποιεί ξεχωριστά εκτελέσιμα εργαλεία: ProjectDiscovery `httpx`, `subfinder`, `nuclei` και `gowitness`.
 
-Αν το Go είναι εγκατεστημένο, το TriageFlow προσπαθεί να εγκαταστήσει εργαλεία που λείπουν στο `~/go/bin`. Χρειάζεται σύνδεση στο Internet και η εγκατάσταση μπορεί να αποτύχει λόγω έκδοσης Go, δικτύου ή συμβατότητας. Αν το μήνυμα λέει ότι λείπει το Go, εγκατέστησέ το από τις επίσημες οδηγίες ή τον package manager της διανομής σου και ξανατρέξε το πρόγραμμα.
+Αν το Go είναι εγκατεστημένο, το TriageFlow προσπαθεί να εγκαταστήσει εργαλεία που λείπουν στο `~/go/bin`. Αν δεν θέλεις να εγκαταστήσεις Chrome/Chromium ή να χρησιμοποιήσεις browser automation, επίλεξε screenshots = Όχι στον wizard. Χρειάζεται σύνδεση στο Internet και η εγκατάσταση μπορεί να αποτύχει λόγω έκδοσης Go, δικτύου ή συμβατότητας. Αν το μήνυμα λέει ότι λείπει το Go, εγκατέστησέ το από τις επίσημες οδηγίες ή τον package manager της διανομής σου και ξανατρέξε το πρόγραμμα.
 
 Για έλεγχο εκδόσεων:
 
