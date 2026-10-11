@@ -219,7 +219,7 @@ def _table(title: str, columns: list[tuple[str, str]], rows: list[dict], empty: 
             cells = []
             for key, _label in columns:
                 value = row.get(key, "")
-                if key in ("url", "login_url", "security_reference"):
+                if key in ("url", "login_url", "security_reference", "base_url"):
                     href = _as_text(value)
                     if href.startswith(("http://", "https://")):
                         cells.append(f'<td><a href="{_cell(href)}" rel="noreferrer">{_cell(href)}</a></td>')
@@ -352,11 +352,12 @@ footer{padding:2rem;color:#9caec4;text-align:center}
     ]
     content = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TriageFlow v2 Security Recon Report</title><style>{style}</style></head>
-<body><header><h1>TriageFlow v2 — Recon Report</h1>
+<title>TriageFlow v2.0.1 Security Recon Report</title><style>{style}</style></head>
+<body><header><h1>TriageFlow v2.0.1 — Recon Report</h1>
 <div class="subtitle">Generated at {_cell(status.get('finished_utc', 'unknown'))} · Output folder: {_cell(output_dir.name)}</div>
 <div class="notice"><strong>Interpretation note:</strong> CVE matches and technology fingerprints are investigation leads, not confirmed vulnerabilities.
-Login-panel discovery is GET-only. No default credentials were submitted or tested. Screenshots are captured only when enabled.</div></header>
+Login-panel discovery is GET-only. Virtual-host findings are based on HTTP Host-header responses and may not have DNS records.
+No default credentials were submitted or tested. Screenshots are captured only when enabled.</div></header>
 <main><div class="cards">{cards}</div>
 {"".join(sections)}
 </main><footer>TriageFlow v2 · Authorized assessment only · Keep reports, logs and screenshots private when they contain sensitive data.</footer></body></html>
