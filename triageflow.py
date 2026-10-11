@@ -188,7 +188,7 @@ def save_report(out_dir: Path, status: dict) -> None:
         "- default-credentials-review.md/.csv: manual hardening checklist; no login attempts",
         "- cve-candidates.json and cve-candidates.md: NVD keyword search candidates",
         "- nuclei-findings.jsonl: Nuclei findings, if enabled",
-        "- report.html: searchable one-file report, when enabled",
+        *(["- report.html: self-contained HTML report"] if status.get("html_report_enabled", True) else []),
         "- gowitness/: screenshots of live URLs including discovered live subdomains, if enabled",
         "- *.log: command output and troubleshooting details", "",
         "Only assess targets within your written authorization and scope.", ""
@@ -393,7 +393,7 @@ def main() -> int:
         print("[ERROR] Required tools unavailable; no scan started: " + ", ".join(missing))
         return 2
 
-    print("TriageFlow — authorized testing only")
+    print(f"TriageFlow v{VERSION} — authorized testing only")
     print(f"Input targets: {len(targets)}; root domains: {len(roots)}")
     print("All live URLs reported by httpx will be passed to enabled downstream stages.")
     if input("Confirm targets are yours or explicitly in scope (type YES): ").strip() != "YES":
