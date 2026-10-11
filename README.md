@@ -27,7 +27,7 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 |---|---|---|
 | **Subfinder** | Passive subdomain enumeration for supplied root domains. `--subfinder-all` asks it to use all configured sources; this may be slower and some sources may need API keys. | `subdomains.txt` |
 | **Custom wordlist (`-w`)** | Builds in-scope hostname candidates and resolves them in parallel using ProjectDiscovery `dnsx` with a short per-query timeout. It reads DNS servers from `/etc/resolv.conf` by default and checks the system hosts file. Full hostnames from another domain are rejected. | `wordlist-candidates.txt`, `wordlist-resolved.txt`, `dnsx.log` |
-| **Virtual-host fallback (ffuf)** | If neither DNS wordlist checks nor Subfinder find subdomains, the CLI asks whether to try HTTP `Host`-header discovery. Use `--vhost-fuzz` to run it explicitly even when DNS results exist. | `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt`, `ffuf-vhost-*.log` |
+| **Virtual-host fallback (ffuf)** | `--vhost-fuzz` runs alongside DNS discovery. For direct Host-header discovery without first resolving candidates through `dnsx`, use the standalone `vhost_direct.py` entry point described below. | `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt`, `ffuf-vhost-*.log` |
 | **httpx (ProjectDiscovery)** | Probes targets and records response status, title, server header, and detected technologies as JSONL. This is the ProjectDiscovery CLI tool, not the unrelated Python HTTPX library. | `live.txt`, `httpx-details.jsonl` |
 | **Software inventory** | Extracts product/version observations visible to httpx. | `software-inventory.csv` |
 | **NVD CVE lookup** | Searches NIST NVD API 2.0 for a limited number of versioned product candidates. Results are keyword matches that require validation against the affected-version range. | `cve-candidates.json`, `cve-candidates.md` |
@@ -37,6 +37,20 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 | **Asset inventory** | Flattens HTTP results into an easy-to-filter CSV. | `asset-inventory.csv` |
 | **Default-account hygiene review** | Associates detected login pages with visible product fingerprints and provides vendor links and manual hardening checks. It does not try usernames or passwords. | `default-credentials-review.md`, `default-credentials-review.csv` |
 | **HTML report** | Combines assets, fingerprints, CVE candidates, login pages, the default-account checklist, Nuclei findings and stage status into one local page. | `report.html` |
+
+## Direct virtual-host discovery without DNS pre-resolution
+
+If you want to test virtual hosts directly, without first sending every candidate through dnsx, use the standalone `vhost_direct.py` entry point. It sends requests to the supplied base URL and varies only the HTTP Host header, using ffuf. It requires ffuf, but not dnsx or Subfinder.
+
+```bash
+python3 vhost_direct.py \
+  -u http://inlanefreight.local/ \
+  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-110000.txt \
+  --rate 100 \
+  --max-time 120
+```
+
+Use a wordlist of single labels (for example, admin, dev, portal). The base URL itself must be reachable from Kali; the script asks you to confirm authorization before sending requests. Results are saved in a timestamped directory under `triageflow-results/`: `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt`, and `ffuf-vhost.log`. These results are separate from the main `triageflow.py` pipeline's `live.txt`.
 
 ### Pipeline overview
 
