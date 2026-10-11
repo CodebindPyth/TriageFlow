@@ -417,6 +417,7 @@ def save_report(out_dir: Path, status: dict) -> None:
         f"- Software fingerprint rows: {status.get('software_fingerprint_count', 0)}",
         f"- Default-credential review entries (manual only): {status.get('default_credential_review_count', 0)}",
         f"- Login panels found: {status.get('login_panel_count', 0)}",
+        f"- Virtual hosts found: {status.get('vhost_count', 0)}",
         f"- CVE keyword candidates: {status.get('cve_candidate_count', 0)}",
         f"- Nuclei exit code: {status.get('nuclei_exit_code', 'not run')}",
         f"- GoWitness exit code: {status.get('gowitness_exit_code', 'not run')}", "",
@@ -425,6 +426,7 @@ def save_report(out_dir: Path, status: dict) -> None:
         "- subdomains.txt: Subfinder results, if enabled",
         "- wordlist-candidates.txt and wordlist-resolved.txt: custom wordlist results, if used",
         "- dnsx.log: bounded parallel DNS resolution for custom wordlist candidates",
+        "- vhost-subdomains.txt and vhost-findings.csv/.json: virtual hosts discovered using Host headers, if enabled",
         "- all-targets.txt: deduplicated target list",
         "- live.txt: live URLs from httpx; shared by Nuclei and GoWitness",
         "- httpx-details.jsonl: JSONL response and technology fingerprints",
@@ -753,10 +755,71 @@ def main() -> int:
             save_report(out_dir, status)
             return 2
 
+    vhost_rows: list[dict] = []
+    vhost_hosts: list[str] = []
+    should_run_vhost = bool(args.vhost_fuzz)
+    if wordlist and roots and not args.vhost_fuzz and not wordlist_names and not discovered:
+        print(
+            "\n[!] No subdomains from the wordlist resolved through DNS. "
+            "For lab domains, the web server may use virtual hosts that have no DNS records."
+        )
+        print("    Virtual-host discovery sends HTTP requests with different Host headers.")
+        try:
+            answer = input("Try virtual-host discovery with ffuf? Type YES to run it: ").strip()
+        except EOFError:
+            answer = ""
+        should_run_vhost = answer == "YES"
+
+    if should_run_vhost:
+        missing_ffuf = [] if shutil.which("ffuf") else ensure_tools(["ffuf"])
+        if missing_ffuf:
+            message = "ffuf is unavailable; virtual-host discovery was skipped."
+            print("[WARN] " + message)
+            status["stages"]["vhost_fuzz"] = {"status": "skipped", "reason": message}
+        else:
+            try:
+                for root in roots:
+                    base_url = base_url_for_root(root, targets)
+                    vhost_rows.extend(
+                        discover_vhosts(
+                            base_url, root, wordlist, out_dir,
+                            rate=args.vhost_rate,
+                            timeout=min(max(args.timeout, 1), 5),
+                            max_time=args.vhost_max_time,
+                        )
+                    )
+                write_vhost_outputs(vhost_rows, out_dir)
+                vhost_hosts = [row["virtual_host"] for row in vhost_rows]
+                status["vhost_count"] = len(vhost_rows)
+                status["stages"]["vhost_fuzz"] = {
+                    "status": "completed",
+                    "found": len(vhost_rows),
+                    "rate_limit": args.vhost_rate,
+                    "max_time_per_root_seconds": args.vhost_max_time,
+                }
+            except KeyboardInterrupt:
+                status["stages"]["vhost_fuzz"] = "interrupted by user"
+                if vhost_rows:
+                    write_vhost_outputs(vhost_rows, out_dir)
+                    status["vhost_count"] = len(vhost_rows)
+                    vhost_hosts = [row["virtual_host"] for row in vhost_rows]
+                print("\n[!] Virtual-host discovery interrupted. Saving partial results...")
+                save_report(out_dir, status)
+                return 130
+            except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+                print(f"[WARN] Virtual-host discovery failed: {exc}", file=sys.stderr)
+                status["stages"]["vhost_fuzz"] = {"status": "failed", "error": str(exc)}
+                if vhost_rows:
+                    write_vhost_outputs(vhost_rows, out_dir)
+                    status["vhost_count"] = len(vhost_rows)
+                    vhost_hosts = [row["virtual_host"] for row in vhost_rows]
+    elif wordlist and roots:
+        status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains)"
+
     combined = list(dict.fromkeys(direct + roots + discovered + wordlist_names))
     combined_file, live_file = out_dir / "all-targets.txt", out_dir / "live.txt"
     write_lines(combined_file, combined)
-    status["subdomain_count"] = len(set(discovered + wordlist_names))
+    status["subdomain_count"] = len(set(discovered + wordlist_names + vhost_hosts))
     status["target_count"] = len(combined)
 
     details_file = out_dir / "httpx-details.jsonl"
@@ -850,6 +913,8 @@ def main() -> int:
     if wordlist:
         print(f"    Wordlist DNS results: {out_dir / 'wordlist-resolved.txt'}")
         print(f"    DNS log: {out_dir / 'dnsx.log'}")
+    if status.get("vhost_count", 0) or status.get("stages", {}).get("vhost_fuzz"):
+        print(f"    VHost findings: {out_dir / 'vhost-findings.csv'}")
     print(f"    Summary: {out_dir / 'README.md'}")
     print(f"    JSON report: {out_dir / 'summary.json'}")
     if status.get("html_report_enabled", True):
