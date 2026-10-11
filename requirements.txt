@@ -1,2 +1,2 @@
 # Python standard library only.
-# Go-based CLI tools are installed separately as needed: httpx, nuclei, subfinder, dnsx, gowitness.
+# Go-based CLI tools are installed separately as needed: httpx, nuclei, subfinder, dnsx, ffuf, gowitness.
