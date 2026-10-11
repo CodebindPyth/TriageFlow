@@ -13,6 +13,12 @@
 - Added unit tests for CPE triage, reports, output escaping, wizard selection, and screenshot options.
 
 ### Changed
+- Replaced sequential `socket.getaddrinfo` wordlist checks with parallel ProjectDiscovery dnsx resolution.
+- Bounded DNS waiting with a two-second query timeout, one attempt, 100 workers, and a progress message every 10 seconds.
+- Enabled dnsx wildcard DNS filtering; reads system DNS resolvers from `/etc/resolv.conf` and checks the system hosts file for private lab names.
+- Added `--dns-resolvers`, `--dns-threads`, and `--dns-timeout` CLI options.
+- Ctrl+C during the wordlist DNS stage stops without a Python traceback and saves the partial status/report when possible.
+- Ignores malformed wordlist entries and full hostnames belonging to another root domain.
 - Greek quickstart and README explain how to use v2 and interpret each report.
 - GoWitness captures screenshots from the same live.txt list used by downstream stages, so responding discovered subdomains are included when screenshot capture is enabled.
 
