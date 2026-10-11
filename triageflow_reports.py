@@ -9,7 +9,7 @@ import csv
 import html
 import json
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 
 ASSET_FIELDS = [
@@ -164,8 +164,8 @@ def write_default_credentials_review(
     ]
     if not rows:
         md += [
-            "No login panels were detected in the checked paths, so no per-panel checklist was created.",
-            "This does not prove that login interfaces are absent. Check the asset inventory and organization-approved configuration records as well.", "",
+            "No login panel was confirmed by the bounded GET-only discovery pass. The detector checks common authentication routes and login-like same-origin links found in returned HTML.",
+            "This does not prove that login interfaces are absent. JavaScript-rendered, unlinked, or custom login pages may require a browser-based review; see login-discovery-summary.json for coverage details.", "",
         ]
     for index, row in enumerate(rows, start=1):
         md += [
@@ -247,6 +247,7 @@ def generate_html_report(output_dir: Path, status: dict) -> Path:
     panels = read_csv_rows(output_dir / "login-panels.csv")
     vhosts = read_csv_rows(output_dir / "vhost-findings.csv")
     default_review = read_csv_rows(output_dir / "default-credentials-review.csv")
+    login_summary = _load_json(output_dir / "login-discovery-summary.json", {})
     cve_doc = _load_json(output_dir / "cve-candidates.json", {})
     cve_rows = []
     for product in cve_doc.get("results", []) if isinstance(cve_doc, dict) else []:
@@ -305,7 +306,7 @@ h1{margin:0 0 .35rem;font-size:clamp(1.7rem,3vw,2.6rem)}h2{margin-top:2rem}
 table{border-collapse:collapse;width:100%;min-width:700px;background:#171f2b}
 th,td{text-align:left;padding:.65rem .8rem;border-bottom:1px solid #303d50;vertical-align:top;max-width:500px;overflow-wrap:anywhere}
 th{background:#243247;position:sticky;top:0}tr:last-child td{border-bottom:0}
-a{color:#8fc7ff}.empty{color:#bac8d9;text-align:center;padding:1.25rem}
+a{color:#8fc7ff}.empty{color:#bac8d9;text-align:center;padding:1.25rem}\n.screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}\n.shot{margin:0;padding:.5rem;background:#1b2533;border:1px solid #344155;border-radius:.75rem;min-width:0}\n.shot img{display:block;width:100%;height:auto;max-height:360px;object-fit:contain;background:#0b0e13;border-radius:.4rem}\n.shot figcaption{padding:.5rem .25rem;overflow-wrap:anywhere;color:#c8d5e4;font-size:.9rem}
 footer{padding:2rem;color:#9caec4;text-align:center}
 @media print{body{background:white;color:#111}.card,table{background:white;color:#111}.notice{background:#f8f1e3}a{color:#0645ad}header{background:white;color:#111}}
 """
@@ -336,7 +337,7 @@ footer{padding:2rem;color:#9caec4;text-align:center}
         _table("Login panels", [
             ("login_url", "Login URL"), ("title", "Title"), ("status_code", "HTTP status"),
             ("evidence", "Detection evidence"),
-        ], panels, "No login panels detected in the checked paths."),
+        ], panels, "No login panel was confirmed. Common routes and login-like same-origin links were checked; JavaScript-only or unlinked routes may still be missed. See login-discovery-summary.json for coverage details."),
         _table("Default-credential hygiene checklist", [
             ("probable_product", "Probable product"), ("login_url", "Login URL"),
             ("review_status", "Status"), ("recommended_manual_checks", "General checks"),
@@ -350,6 +351,55 @@ footer{padding:2rem;color:#9caec4;text-align:center}
         _table("Pipeline stages", [("stage", "Stage"), ("result", "Result")],
                stage_rows, "No stage metadata recorded."),
     ]
+    login_summary_rows = [
+        {"metric": "Unique origins checked", "value": login_summary.get("origins_checked", "not run")},
+        {"metric": "Origins not checked due to limit", "value": login_summary.get("origins_not_checked_due_to_limit", "")},
+        {"metric": "GET requests sent", "value": login_summary.get("requests_sent", "")},
+        {"metric": "HTML pages inspected", "value": login_summary.get("html_pages_read", "")},
+        {"metric": "Login-like links queued", "value": login_summary.get("login_like_links_queued", "")},
+        {"metric": "Login panels found", "value": login_summary.get("panels_found", len(panels))},
+        {"metric": "Method", "value": login_summary.get("method", "not run")},
+        {"metric": "Known limitation", "value": login_summary.get("limitations", "")},
+    ]
+    sections.insert(-1, _table(
+        "Login discovery coverage",
+        [("metric", "Metric"), ("value", "Value")],
+        login_summary_rows,
+        "Login discovery did not run. Use --no-login-check only when you intentionally want to disable it.",
+    ))
+
+    screenshot_dir = output_dir / "gowitness"
+    image_files = sorted(
+        path for path in screenshot_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+    ) if screenshot_dir.is_dir() else []
+    if image_files:
+        gallery_items = []
+        for image_path in image_files:
+            relative_path = image_path.relative_to(output_dir).as_posix()
+            source = html.escape(quote(relative_path, safe="/"), quote=True)
+            label = html.escape(image_path.stem.replace("_", " "))
+            gallery_items.append(
+                f'<figure class="shot"><a href="{source}" target="_blank" rel="noreferrer">'
+                f'<img loading="lazy" src="{source}" alt="Screenshot: {label}"></a>'
+                f'<figcaption>{label}</figcaption></figure>'
+            )
+        screenshot_section = (
+            '<section><h2>Screenshots</h2>'
+            f'<p class="muted">{len(image_files)} screenshot image(s) found. Keep the local '
+            '<code>gowitness/</code> directory alongside this report.html file.</p>'
+            '<div class="screenshots">' + "".join(gallery_items) + '</div></section>'
+        )
+    else:
+        screenshot_stage = status.get("stages", {}).get("gowitness", "not run")
+        screenshot_section = (
+            '<section><h2>Screenshots</h2>'
+            f'<p class="empty">No screenshot images were found. GoWitness stage: '
+            f'{html.escape(str(screenshot_stage))}. Check gowitness.log and the local '
+            '<code>gowitness/</code> directory.</p></section>'
+        )
+    sections.insert(-1, screenshot_section)
+
     report_version = html.escape(str(status.get("version") or "unknown"))
     content = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -358,7 +408,7 @@ footer{padding:2rem;color:#9caec4;text-align:center}
 <div class="subtitle">Generated at {_cell(status.get('finished_utc', 'unknown'))} · Output folder: {_cell(output_dir.name)}</div>
 <div class="notice"><strong>Interpretation note:</strong> CVE matches and technology fingerprints are investigation leads, not confirmed vulnerabilities.
 Login-panel discovery is GET-only. Virtual-host findings are based on HTTP Host-header responses and may not have DNS records.
-No default credentials were submitted or tested. Screenshots are captured only when enabled.</div></header>
+No default credentials were submitted or tested. Screenshots are displayed below when present; keep the local gowitness/ folder beside report.html.</div></header>
 <main><div class="cards">{cards}</div>
 {"".join(sections)}
 </main><footer>TriageFlow v{report_version} · Authorized assessment only · Keep reports, logs and screenshots private when they contain sensitive data.</footer></body></html>
