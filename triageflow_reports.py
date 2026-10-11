@@ -18,8 +18,8 @@ ASSET_FIELDS = [
 ]
 CREDENTIAL_REVIEW_FIELDS = [
     "origin", "login_url", "title", "probable_product", "observed_versions",
-    "review_status", "recommended_manual_checks", "security_reference",
-    "credentials_submitted",
+    "review_status", "recommended_manual_checks", "product_specific_review",
+    "security_reference", "credentials_submitted",
 ]
 
 PRODUCT_GUIDES = [
@@ -34,6 +34,19 @@ PRODUCT_GUIDES = [
     (("nexus repository", "sonatype nexus"), "Sonatype Nexus Repository", "https://help.sonatype.com/en/security.html"),
     (("jira", "confluence"), "Atlassian application", "https://confluence.atlassian.com/security"),
 ]
+PRODUCT_REVIEW_NOTES = {
+    "WordPress": "There is no universal default credential for every installation. Review privileged accounts, unique passwords, MFA, and exposure of the administration route.",
+    "Jenkins": "Verify first-run setup is complete, the initial unlock secret is no longer exposed, anonymous access is disabled, and permissions follow least privilege.",
+    "Grafana": "Verify the initial administrator password was changed; review local admin/service accounts, MFA or SSO, and data-source secrets.",
+    "Apache Tomcat": "Remove sample accounts; disable Manager/Host Manager if unused and restrict any required management application to trusted networks.",
+    "phpMyAdmin": "Restrict the panel to trusted networks and review database users and privileges. A login page does not establish that default credentials exist.",
+    "GitLab": "Review initial/root account state for the installation method, enforce MFA, disable unused accounts, and rotate exposed tokens.",
+    "SonarQube": "Verify initial administrator credentials were changed and review account permissions, tokens, and public exposure.",
+    "Elastic Stack": "Review enabled users, roles, service accounts, and network access. Protect Kibana and Elasticsearch as separate attack surfaces.",
+    "Sonatype Nexus Repository": "Verify first-run setup is complete and initial admin credentials were rotated; review anonymous read/write access and repository permissions.",
+    "Atlassian application": "Review administrator accounts, SSO/MFA, inactive accounts, and any public-registration settings.",
+    "Unknown / custom login application": "No universal default credential can be inferred from a login panel. Check the vendor's deployment documentation and account configuration through an approved administrator channel.",
+}
 GENERIC_SECURITY_GUIDE = "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
 
 
@@ -117,6 +130,7 @@ def write_default_credentials_review(
             if hostname and urlsplit(_as_text(item.get("url"))).hostname == hostname
         ]
         product, reference = _product_family(panel, related)
+        product_note = PRODUCT_REVIEW_NOTES.get(product, PRODUCT_REVIEW_NOTES["Unknown / custom login application"])
         observed_products = sorted({
             f"{_as_text(item.get('product'))} {_as_text(item.get('version'))}".strip()
             for item in related if _as_text(item.get("product"))
@@ -133,6 +147,7 @@ def write_default_credentials_review(
                 "credentials; disable unused accounts; require MFA where available; restrict the "
                 "management interface to trusted networks; review authentication logs."
             ),
+            "product_specific_review": product_note,
             "security_reference": reference,
             "credentials_submitted": "No",
         })
@@ -159,7 +174,8 @@ def write_default_credentials_review(
             f"- Page title: {row['title'] or 'Not available'}",
             f"- Observed software: {row['observed_versions'] or 'No matching version fingerprint'}",
             f"- Status: {row['review_status']}",
-            f"- Checks: {row['recommended_manual_checks']}",
+            f"- General checks: {row['recommended_manual_checks']}",
+            f"- Product-specific review: {row['product_specific_review']}",
             f"- Vendor/security guidance: {row['security_reference']}", "",
         ]
     (output_dir / "default-credentials-review.md").write_text("\n".join(md) + "\n", encoding="utf-8")
@@ -311,7 +327,8 @@ footer{padding:2rem;color:#9caec4;text-align:center}
         ], panels, "No login panels detected in the checked paths."),
         _table("Default-credential hygiene checklist", [
             ("probable_product", "Probable product"), ("login_url", "Login URL"),
-            ("review_status", "Status"), ("recommended_manual_checks", "Recommended checks"),
+            ("review_status", "Status"), ("recommended_manual_checks", "General checks"),
+            ("product_specific_review", "Product-specific review"),
             ("security_reference", "Vendor/security reference"),
         ], default_review, "No detected login panels to review. Hidden or custom login routes may still exist."),
         _table("Nuclei findings", [
