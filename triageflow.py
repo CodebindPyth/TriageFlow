@@ -705,7 +705,8 @@ def main() -> int:
         "root_domain_count": len(roots), "subdomain_count": 0,
         "target_count": 0, "live_url_count": 0, "asset_count": 0,
         "software_fingerprint_count": 0, "login_panel_count": 0,
-        "default_credential_review_count": 0, "cve_candidate_count": 0, "stages": {}
+        "default_credential_review_count": 0, "cve_candidate_count": 0,
+        "vhost_count": 0, "stages": {}
     }
 
     discovered: list[str] = []
@@ -916,7 +917,7 @@ def main() -> int:
     if wordlist:
         print(f"    Wordlist DNS results: {out_dir / 'wordlist-resolved.txt'}")
         print(f"    DNS log: {out_dir / 'dnsx.log'}")
-    if status.get("vhost_count", 0) or status.get("stages", {}).get("vhost_fuzz"):
+    if (out_dir / "vhost-findings.csv").is_file():
         print(f"    VHost findings: {out_dir / 'vhost-findings.csv'}")
     print(f"    Summary: {out_dir / 'README.md'}")
     print(f"    JSON report: {out_dir / 'summary.json'}")
