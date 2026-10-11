@@ -4,6 +4,7 @@
 
 ### Added
 - Guided setup lets the user independently choose screenshot capture and consolidated HTML report generation.
+- Screenshot preflight warns when no Chrome/Chromium browser is available on PATH.
 - Single-file report.html combines asset inventory, software fingerprints, NVD CVE candidates, login panels, default-account hygiene review, Nuclei findings, and stage results.
 - asset-inventory.csv adds an easy-to-filter asset list using fields reported by ProjectDiscovery httpx.
 - default-credentials-review.md and .csv provide a product-aware manual configuration checklist. No credentials are submitted or tested.
