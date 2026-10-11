@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.8 — 2026-10-11
+
+### Fixed / Changed
+- Login discovery now checks expanded common paths and follows login-like links found in same-origin HTML pages, with a bounded per-origin request budget; it remains GET-only and never submits credentials.
+- Added `login-discovery-summary.json` with coverage metrics and explicit limitations.
+- HTML report now includes a screenshot gallery referencing local files in the `gowitness/` directory and a login discovery coverage table.
+- Software fingerprints for the same URL/product/version are merged across `tech`, `webserver`, and `server` sources to remove duplicate rows.
+- `--bruteforce-direct` bypasses the standalone `dnsx` stage only; Subfinder remains enabled unless `--no-subdomains` is requested.
+- When no live URLs exist, downstream stages are reported as not run due to missing inputs rather than as manually skipped.
+- Added tests for linked custom login routes, duplicate-fingerprint merging and report screenshot rendering.
+
 ## 2.0.7 — 2026-10-11
 
 ### Fixed
