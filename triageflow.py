@@ -308,7 +308,7 @@ def discover_wordlist(
             try:
                 while True:
                     try:
-                        rc = process.wait(timeout=heartbeat_interval)
+                        rc = process.wait(timeout=10)
                         break
                     except subprocess.TimeoutExpired:
                         elapsed = int(time.monotonic() - started)
@@ -500,7 +500,7 @@ def run_step(
             try:
                 while True:
                     try:
-                        return_code = process.wait(timeout=10)
+                        return_code = process.wait(timeout=heartbeat_interval)
                         break
                     except subprocess.TimeoutExpired:
                         elapsed = int(time.monotonic() - started)
@@ -511,7 +511,7 @@ def run_step(
                                     stream.seek(progress_offset)
                                     chunk = stream.read()
                                 progress_offset += len(chunk)
-                                progress_records += chunk.count(b"\\n")
+                                progress_records += chunk.count(b"\n")
                             except OSError:
                                 # httpx may not create its output file until its first result.
                                 pass
