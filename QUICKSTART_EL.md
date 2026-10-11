@@ -197,19 +197,13 @@ python3 triageflow.py -u inlanefreight.local -w /home/kali/SecLists/Discovery/DN
 
 Το `.local` συνήθως ανήκει σε εσωτερικό/lab namespace, οπότε το Subfinder μπορεί να μην επιστρέψει παθητικά subdomains από δημόσιες πηγές. Επίσης, το ότι ένα όνομα απαντά στο DNS δεν σημαίνει ότι έχει web service· αυτό ελέγχεται στο επόμενο στάδιο με httpx.
 
-# TriageFlow v2.0.1 — Οδηγός χρήσης στα Ελληνικά
+### Virtual-host discovery όταν η DNS αναζήτηση επιστρέφει μηδέν
 
-Αυτός είναι ο πρακτικός οδηγός για να ξεκινήσεις χωρίς να χρειάζεται να θυμάσαι παραμέτρους ή να γράφεις μεγάλες εντολές.
+Σε ορισμένα lab περιβάλλοντα, όπως το `inlanefreight.local`, ο web server μπορεί να εξυπηρετεί διαφορετικές εφαρμογές ανάλογα με το HTTP `Host` header, παρότι τα αντίστοιχα ονόματα δεν έχουν ξεχωριστές DNS εγγραφές. Σε αυτήν την περίπτωση το DNS wordlist δεν αρκεί.
 
-> **Χρησιμοποίησέ το μόνο** σε συστήματα που σου ανήκουν ή για τα οποία έχεις ρητή εξουσιοδότηση.
+Αν το DNS και το Subfinder δεν βρουν subdomains, το TriageFlow σε ρωτά αν θέλεις να δοκιμάσει virtual-host discovery με το `ffuf`. Πληκτρολόγησε ακριβώς `YES` για να το εγκρίνεις.
 
-## DNS wordlist και virtual hosts
-
-Η v2.0.1 χρησιμοποιεί το `dnsx` για παράλληλα DNS checks, με timeout ανά ερώτημα και μηνύματα προόδου. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιουργήθηκαν από το wordlist· το `wordlist-resolved.txt` περιέχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια έχουν HTTP/HTTPS υπηρεσία.
-
-Σε εργαστήρια όπως το `inlanefreight.local`, μπορεί να υπάρχουν virtual hosts που επιλέγονται από το HTTP `Host` header χωρίς να έχουν ξεχωριστές DNS εγγραφές. Αν Subfinder και DNS wordlist δεν βρουν subdomains, το TriageFlow ρωτά αν θέλεις να συνεχίσει με `ffuf` για virtual-host discovery. Πληκτρολόγησε `YES` για να το εγκρίνεις.
-
-Για να εκτελέσεις ρητά το virtual-host discovery μαζί με το DNS check:
+Μπορείς να το ενεργοποιήσεις απευθείας με την επιλογή `--vhost-fuzz`:
 
 ```bash
 python3 triageflow.py -u http://inlanefreight.local/ --no-subdomains \
@@ -217,13 +211,9 @@ python3 triageflow.py -u http://inlanefreight.local/ --no-subdomains \
   --vhost-fuzz
 ```
 
-Χρησιμοποίησέ το μόνο στο εγκεκριμένο lab. Το `ffuf` στέλνει HTTP αιτήματα με διαφορετικές τιμές στο `Host` header. Η προεπιλεγμένη ταχύτητα είναι έως 100 requests/s και ο μέγιστος χρόνος είναι 120 δευτερόλεπτα ανά root. Τα ευρήματα αποθηκεύονται στα `vhost-findings.csv`, `vhost-findings.json` και `vhost-subdomains.txt`.
+Η παραπάνω εντολή πρέπει να χρησιμοποιείται μόνο στο εγκεκριμένο lab. Το `ffuf` στέλνει HTTP αιτήματα με διαφορετικές τιμές στο `Host` header, μέχρι 100 αιτήματα/δευτερόλεπτο και με μέγιστο χρόνο 120 δευτερολέπτων ανά root. Τα ευρήματα αποθηκεύονται στα `vhost-findings.csv`, `vhost-findings.json` και `vhost-subdomains.txt` και εμφανίζονται στο `report.html`.
 
-Τα virtual-host ονόματα μπορεί να μην επιλύονται μέσω DNS. Για αυτό, δεν μπαίνουν αυτόματα στο `live.txt` ούτε στα GoWitness screenshots· τα αποτελέσματά τους παρουσιάζονται ξεχωριστά στο `report.html`.
-
-Το `--no-subdomains` παραλείπει το Subfinder, αλλά δεν απενεργοποιεί το custom wordlist ή το DNS check. Σε private `.local` namespaces, οι δημόσιες παθητικές πηγές του Subfinder συχνά δεν έχουν χρήσιμες εγγραφές.
-
-Για τις υπόλοιπες οδηγίες χρήσης, εγκατάστασης και troubleshooting, συνέχισε από τις επόμενες ενότητες αυτού του οδηγού.
+Τα virtual-host ονόματα μπορεί να μην επιλύονται μέσω DNS. Γι’ αυτό δεν μπαίνουν αυτόματα στο `live.txt` ούτε στα GoWitness screenshots· τα αποτελέσματά τους παρουσιάζονται ξεχωριστά.
 
 ### Το NVD δεν επιστρέφει αποτελέσματα ή εμφανίζει rate limit
 
