@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.4"
+VERSION = "2.0.5"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -665,6 +665,14 @@ def main() -> int:
     inputs.add_argument("-u", "--url", dest="single_target", help="One domain, host, IP, or URL")
     parser.add_argument("-w", "--wordlist", help="Custom subdomain wordlist, one entry per line")
     parser.add_argument(
+        "--bruteforce-direct", action="store_true",
+        help="Send generated wordlist hostnames straight to httpx; skip dnsx and Subfinder",
+    )
+    parser.add_argument(
+        "--bruteforce-rate", type=int, default=50,
+        help="httpx request rate limit in direct wordlist mode (default: 50 requests/s)",
+    )
+    parser.add_argument(
         "--no-wordlist",
         action="store_true",
         help="Skip automatic default wordlist detection when -w is not provided",
@@ -706,6 +714,12 @@ def main() -> int:
 
     if args.no_wordlist and args.wordlist:
         parser.error("--no-wordlist cannot be combined with --wordlist")
+    if args.bruteforce_direct and args.vhost_fuzz:
+        parser.error("--bruteforce-direct cannot be combined with --vhost-fuzz")
+    if args.bruteforce_direct and args.no_wordlist:
+        parser.error("--bruteforce-direct requires a wordlist, not --no-wordlist")
+    if args.bruteforce_rate < 1:
+        parser.error("--bruteforce-rate must be at least 1")
     if args.wizard and (args.list or args.single_target):
         parser.error("--wizard cannot be combined with --url or --list")
     if wizard_mode:
@@ -781,9 +795,9 @@ def main() -> int:
         required.append("nuclei")
     if not args.no_screenshots:
         required.append("gowitness")
-    if not args.no_subdomains and roots:
+    if not args.no_subdomains and roots and not args.bruteforce_direct:
         required.append("subfinder")
-    if wordlist and roots:
+    if wordlist and roots and not args.bruteforce_direct:
         required.append("dnsx")
     if args.vhost_fuzz:
         required.append("ffuf")
@@ -827,10 +841,35 @@ def main() -> int:
     pipeline_failures: list[str] = []
     discovered: list[str] = []
     wordlist_names: list[str] = []
+    direct_bruteforce_candidates: list[str] = []
+
+    if args.bruteforce_direct and wordlist and roots:
+        # Build host candidates and pass them directly to httpx. This skips
+        # the separate dnsx resolver stage; httpx itself still has to resolve
+        # candidate names to connect to their web services.
+        words = read_lines(wordlist)
+        print(f"[+] Wordlist file: {wordlist}")
+        print(f"[+] Wordlist entries: {len(words)} non-empty, non-comment lines")
+        direct_bruteforce_candidates = build_wordlist_candidates(roots, words)
+        write_lines(out_dir / "wordlist-candidates.txt", direct_bruteforce_candidates)
+        write_lines(out_dir / "wordlist-resolved.txt", [])
+        print(
+            f"[+] Direct wordlist candidates queued for httpx: "
+            f"{len(direct_bruteforce_candidates)} (no dnsx pre-resolution)"
+        )
+        status["stages"]["wordlist_dns"] = {
+            "status": "skipped",
+            "reason": "--bruteforce-direct sends candidates to httpx instead of dnsx",
+        }
+        status["stages"]["wordlist_direct"] = {
+            "status": "queued for httpx",
+            "candidates": len(direct_bruteforce_candidates),
+            "rate_limit": args.bruteforce_rate,
+        }
 
     # Run the supplied/bundled wordlist first so its results are ready for the
     # main target-probing stage even when passive discovery later fails.
-    if wordlist and roots:
+    if wordlist and roots and not args.bruteforce_direct:
         if args.dns_resolvers:
             resolvers = [value.strip() for value in args.dns_resolvers.split(",") if value.strip()]
         else:
@@ -866,7 +905,13 @@ def main() -> int:
 
     # Passive discovery is complementary; it must not discard successfully
     # resolved wordlist targets if Subfinder errors or returns partial output.
-    if not args.no_subdomains and roots:
+    if args.bruteforce_direct:
+        status["stages"]["subfinder"] = {
+            "status": "skipped",
+            "reason": "--bruteforce-direct skips passive subdomain discovery",
+        }
+
+    if not args.no_subdomains and roots and not args.bruteforce_direct:
         roots_file, sub_file = out_dir / "root-domains.txt", out_dir / "subdomains.txt"
         write_lines(roots_file, roots)
         cmd = ["subfinder", "-dL", str(roots_file), "-silent", "-o", str(sub_file)]
@@ -890,7 +935,10 @@ def main() -> int:
     vhost_rows: list[dict] = []
     vhost_hosts: list[str] = []
     should_run_vhost = bool(args.vhost_fuzz)
-    if wordlist and roots and not args.vhost_fuzz and not wordlist_names and not discovered:
+    if (
+        wordlist and roots and not args.bruteforce_direct
+        and not args.vhost_fuzz and not wordlist_names and not discovered
+    ):
         print(
             "\n[!] No subdomains from the wordlist resolved through DNS. "
             "For lab domains, the web server may use virtual hosts that have no DNS records."
@@ -945,23 +993,32 @@ def main() -> int:
                     write_vhost_outputs(vhost_rows, out_dir)
                     status["vhost_count"] = len(vhost_rows)
                     vhost_hosts = [row["virtual_host"] for row in vhost_rows]
-    elif wordlist and roots:
+    elif wordlist and roots and not args.bruteforce_direct:
         if not wordlist_names and not discovered:
             status["stages"]["vhost_fuzz"] = "skipped by user after zero DNS results"
         else:
             status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains; use --vhost-fuzz to run both)"
 
     combined = combine_targets(direct, roots, wordlist_names, discovered)
+    if direct_bruteforce_candidates:
+        combined = list(dict.fromkeys([*combined, *direct_bruteforce_candidates]))
     combined_file, live_file = out_dir / "all-targets.txt", out_dir / "live.txt"
     write_lines(combined_file, combined)
     status["subdomain_count"] = len(set(discovered + wordlist_names + vhost_hosts))
     status["target_count"] = len(combined)
 
     details_file = out_dir / "httpx-details.jsonl"
-    rc = run_step("httpx: identify live services and fingerprint technologies",
-                  ["httpx", "-l", str(combined_file), "-silent", "-no-color",
-                   "-timeout", str(args.timeout), "-td", "-server", "-title",
-                   "-status-code", "-json", "-o", str(details_file)], out_dir / "httpx.log")
+    httpx_command = [
+        "httpx", "-l", str(combined_file), "-silent", "-no-color",
+        "-timeout", str(args.timeout), "-td", "-server", "-title",
+        "-status-code", "-json", "-o", str(details_file),
+    ]
+    if args.bruteforce_direct:
+        httpx_command.extend(["-rate-limit", str(args.bruteforce_rate)])
+    rc = run_step(
+        "httpx: identify live services and fingerprint technologies",
+        httpx_command, out_dir / "httpx.log",
+    )
     status["stages"]["httpx"] = rc
     if rc:
         save_report(out_dir, status)
@@ -975,6 +1032,17 @@ def main() -> int:
     assets = write_asset_inventory(httpx_records, out_dir / "asset-inventory.csv")
     fingerprints = write_software_inventory(httpx_records, out_dir / "software-inventory.csv")
     status["live_url_count"] = len(live)
+    if args.bruteforce_direct:
+        live_hosts = {
+            hostname_of(urlparse(url).netloc or url)
+            for url in live
+        }
+        status["stages"]["wordlist_direct"] = {
+            "status": "completed",
+            "candidates": len(direct_bruteforce_candidates),
+            "live_urls": len(live),
+            "rate_limit": args.bruteforce_rate,
+        }
     status["asset_count"] = len(assets)
     status["software_fingerprint_count"] = len(fingerprints)
     if not live:
@@ -1048,8 +1116,12 @@ def main() -> int:
     print(f"    Combined targets: {combined_file}")
     print(f"    Live URLs: {live_file}")
     if wordlist:
-        print(f"    Wordlist DNS results: {out_dir / 'wordlist-resolved.txt'}")
-        print(f"    DNS log: {out_dir / 'dnsx.log'}")
+        print(f"    Wordlist candidates: {out_dir / 'wordlist-candidates.txt'}")
+        if args.bruteforce_direct:
+            print("    Wordlist mode: direct candidates passed to httpx (dnsx skipped)")
+        else:
+            print(f"    Wordlist DNS results: {out_dir / 'wordlist-resolved.txt'}")
+            print(f"    DNS log: {out_dir / 'dnsx.log'}")
     if (out_dir / "vhost-findings.csv").is_file():
         print(f"    VHost findings: {out_dir / 'vhost-findings.csv'}")
     print(f"    Summary: {out_dir / 'README.md'}")
