@@ -550,7 +550,7 @@ def interactive_setup(args: argparse.Namespace) -> bool:
         args.list = value
         args.single_target = None
 
-    if not args.wordlist:
+    if not args.wordlist and not getattr(args, "no_wordlist", False):
         bundled_wordlist = bundled_wordlist_path()
         wordlist_mode = prompt_choice(
             "Subdomain wordlist?",
