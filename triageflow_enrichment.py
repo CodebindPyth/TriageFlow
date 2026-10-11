@@ -142,8 +142,131 @@ def _english_description(cve: dict) -> str:
     return ""
 
 
+def _version_tokens(value: str) -> tuple:
+    """Approximate a version comparison using numeric and alphabetic components."""
+    return tuple(
+        (0, int(token)) if token.isdigit() else (1, token.casefold())
+        for token in re.findall(r"\d+|[A-Za-z]+", value)
+    )
+
+
+def _compare_versions(left: str, right: str) -> int:
+    """Return -1, 0, or 1; this is a heuristic, not a universal vendor version parser."""
+    a, b = list(_version_tokens(left)), list(_version_tokens(right))
+    length = max(len(a), len(b))
+    a.extend([(0, 0)] * (length - len(a)))
+    b.extend([(0, 0)] * (length - len(b)))
+    for first, second in zip(a, b):
+        if first == second:
+            continue
+        # A numeric segment and text segment cannot be safely ranked across every scheme.
+        if first[0] != second[0]:
+            return 0
+        return -1 if first[1] < second[1] else 1
+    return 0
+
+
+def _iter_cpe_matches(value):
+    """Recursively walk NVD configurations and yield CPE applicability objects."""
+    if isinstance(value, dict):
+        matches = value.get("cpeMatch")
+        if isinstance(matches, list):
+            for match in matches:
+                if isinstance(match, dict):
+                    yield match
+        for key, child in value.items():
+            if key != "cpeMatch":
+                yield from _iter_cpe_matches(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_cpe_matches(child)
+
+
+def _cpe_product_matches(criteria: str, product: str) -> bool:
+    parts = criteria.split(":")
+    if len(parts) < 6 or parts[0].casefold() != "cpe":
+        return False
+    observed = re.sub(r"[^a-z0-9]", "", product.casefold())
+    vendor = re.sub(r"[^a-z0-9]", "", parts[3].replace("\\", "").casefold())
+    cpe_product = re.sub(r"[^a-z0-9]", "", parts[4].replace("\\", "").casefold())
+    combined = vendor + cpe_product
+    return bool(observed) and (
+        observed == cpe_product
+        or observed == combined
+        or (len(observed) >= 5 and observed in cpe_product)
+        or (len(cpe_product) >= 5 and cpe_product in observed)
+    )
+
+
+def _classify_cve_match(cve: dict, product: str, version: str) -> tuple[str, list[str]]:
+    """Compare the observed product/version to NVD CPE criteria when available."""
+    related = []
+    positive = []
+    criteria_seen = []
+    for match in _iter_cpe_matches(cve.get("configurations", [])):
+        criteria = str(match.get("criteria") or match.get("cpe23Uri") or "")
+        if not criteria or not _cpe_product_matches(criteria, product):
+            continue
+        criteria_seen.append(criteria)
+        parts = criteria.split(":")
+        cpe_version = parts[5].replace("\\", "") if len(parts) > 5 else "*"
+        start_in = str(match.get("versionStartIncluding") or "")
+        start_ex = str(match.get("versionStartExcluding") or "")
+        end_in = str(match.get("versionEndIncluding") or "")
+        end_ex = str(match.get("versionEndExcluding") or "")
+
+        if cpe_version not in ("*", "-", ""):
+            if cpe_version.casefold() == version.casefold():
+                positive.append(criteria)
+            continue
+
+        # Ranges are useful when version tokens can be compared. Any ambiguous
+        # cross-scheme comparison is classified as unknown instead of a positive match.
+        inside = True
+        known = False
+        if start_in:
+            cmp = _compare_versions(version, start_in)
+            if cmp == 0 and version.casefold() != start_in.casefold():
+                known = False
+                inside = False
+            elif cmp < 0:
+                inside = False
+            else:
+                known = True
+        if start_ex:
+            cmp = _compare_versions(version, start_ex)
+            if cmp <= 0:
+                inside = False
+            else:
+                known = True
+        if end_in:
+            cmp = _compare_versions(version, end_in)
+            if cmp > 0:
+                inside = False
+            else:
+                known = True
+        if end_ex:
+            cmp = _compare_versions(version, end_ex)
+            if cmp >= 0:
+                inside = False
+            else:
+                known = True
+        if inside and known:
+            positive.append(criteria)
+        elif not (start_in or start_ex or end_in or end_ex):
+            related.append(criteria)
+
+    if positive:
+        return "CPE applicability supports observed version (verify vendor advisory)", list(dict.fromkeys(positive))
+    if criteria_seen:
+        if related:
+            return "CPE product matched; affected version range is unspecified", list(dict.fromkeys(related))
+        return "CPE product found, but observed version was not confirmed in matched criteria", list(dict.fromkeys(criteria_seen))
+    return "Keyword-only candidate; no matching product CPE criteria found", []
+
+
 def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: int = 5) -> dict:
-    """Query NVD for versioned product/version pairs; results are candidates, not verdicts."""
+    """Query NVD with bounded keyword lookups and triage each CVE against its CPE applicability."""
     api_key = os.environ.get("NVD_API_KEY", "").strip()
     grouped = {}
     for item in fingerprints:
@@ -160,7 +283,7 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
     errors = []
     for index, ((product, version), urls) in enumerate(selected):
         if index:
-            # NVD documents lower request limits without an API key.
+            # NVD applies a lower request quota without an API key.
             time.sleep(0.7 if api_key else 6.2)
         params = urllib.parse.urlencode({
             "keywordSearch": f"{product} {version}",
@@ -169,7 +292,7 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
         request = urllib.request.Request(
             f"https://services.nvd.nist.gov/rest/json/cves/2.0?{params}",
             headers={
-                "User-Agent": "TriageFlow/1.0 (software-inventory; authorized assessment)",
+                "User-Agent": "TriageFlow/2.0 (software-inventory; authorized assessment)",
                 **({"apiKey": api_key} if api_key else {}),
             },
         )
@@ -178,11 +301,11 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
             "observed_version": version,
             "source_urls": sorted(url for url in urls if url),
             "query": f"{product} {version}",
-            "match_method": "NVD keywordSearch; validate affected CPE/version range manually",
+            "match_method": "NVD keywordSearch plus local CPE applicability triage",
             "cves": [],
         }
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(request, timeout=20) as response:
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
             for item in payload.get("vulnerabilities", []):
                 cve = item.get("cve") or {}
@@ -190,6 +313,7 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
                 if not cve_id:
                     continue
                 score, severity = _cvss(cve)
+                match_confidence, matching_cpes = _classify_cve_match(cve, product, version)
                 entry["cves"].append({
                     "id": cve_id,
                     "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}",
@@ -198,7 +322,18 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
                     "cvss_score": score,
                     "severity": severity,
                     "description": _english_description(cve)[:1200],
+                    "match_confidence": match_confidence,
+                    "matching_cpes": matching_cpes,
                 })
+            # Prioritize CPE matches first, then CVSS, and retain keyword-only leads too.
+            entry["cves"].sort(
+                key=lambda cve: (
+                    0 if cve["match_confidence"].startswith("CPE applicability supports") else
+                    1 if cve["match_confidence"].startswith("CPE product matched") else
+                    2,
+                    -(float(cve["cvss_score"]) if str(cve["cvss_score"]).replace(".", "", 1).isdigit() else 0.0),
+                )
+            )
             entry["total_results"] = payload.get("totalResults", len(entry["cves"]))
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError) as exc:
             error = f"{product} {version}: {exc}"
@@ -206,6 +341,7 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
             entry["error"] = str(exc)
         results.append(entry)
 
+    all_cves = [cve for entry in results for cve in entry["cves"]]
     document = {
         "source": "NIST National Vulnerability Database API 2.0",
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -213,32 +349,53 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
         "products_available": len(grouped),
         "api_key_configured": bool(api_key),
         "notice": (
-            "Keyword matches are leads, not proof that the observed version is vulnerable. "
-            "Verify the exact product, version range, configuration, and vendor advisory."
+            "NVD keyword search results are leads. CPE classifications are automated triage hints, "
+            "not a final affected-version verdict; confirm vendor advisories, version ranges, and configuration."
         ),
         "results": results,
+        "summary": {
+            "cve_candidates": len(all_cves),
+            "cpe_version_supported": sum(
+                1 for cve in all_cves
+                if cve["match_confidence"].startswith("CPE applicability supports")
+            ),
+            "keyword_only": sum(
+                1 for cve in all_cves
+                if cve["match_confidence"].startswith("Keyword-only")
+            ),
+        },
         "errors": errors,
     }
     output_path.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
     markdown = [
         "# CVE lookup candidates", "",
         "Source: NIST National Vulnerability Database (NVD) API 2.0.", "",
-        "**Important:** keyword results may not affect the exact observed version. Verify affected product/version ranges and vendor advisories before reporting a vulnerability.", "",
+        "**Important:** CPE classifications are automated triage hints, not a final verdict. Verify the affected-version range, vendor advisory, configuration, and whether the reported product is truly running on the asset.", "",
+        f"- Distinct product/version queries: {len(selected)}",
+        f"- CVE keyword candidates: {len(all_cves)}",
+        f"- CPE version-support hints: {document['summary']['cpe_version_supported']}",
+        f"- Keyword-only candidates: {document['summary']['keyword_only']}", "",
     ]
     if not results:
         markdown += ["No versioned products were suitable for an NVD query.", ""]
-    for entry in results:
+    for result in results:
         markdown += [
-            f"## {entry['product']} {entry['observed_version']}", "",
-            f"- Source URLs: {', '.join(entry['source_urls']) or 'not available'}",
-            f"- Candidates returned: {entry.get('total_results', len(entry['cves']))}",
+            f"## {result['product']} {result['observed_version']}", "",
+            f"- Source URLs: {', '.join(result['source_urls']) or 'not available'}",
+            f"- NVD keyword result count: {result.get('total_results', len(result['cves']))}",
+            f"- Lookup method: {result['match_method']}",
         ]
-        if entry.get("error"):
-            markdown.append(f"- Lookup error: {entry['error']}")
-        for cve in entry["cves"]:
+        if result.get("error"):
+            markdown.append(f"- Lookup error: {result['error']}")
+        for cve in result["cves"]:
             detail = cve["description"] or "No English description provided."
             suffix = f" — CVSS {cve['cvss_score']} {cve['severity']}".rstrip()
-            markdown.append(f"- [{cve['id']}]({cve['url']}){suffix}: {detail}")
+            markdown.append(
+                f"- [{cve['id']}]({cve['url']}){suffix} "
+                f"**[{cve['match_confidence']}]**: {detail}"
+            )
+            if cve["matching_cpes"]:
+                markdown.append("  - Matching CPE criteria: " + "; ".join(cve["matching_cpes"]))
         markdown.append("")
     if len(grouped) > len(selected):
         markdown += [
@@ -252,7 +409,9 @@ def query_nvd_cves(fingerprints: list[dict], output_path: Path, max_products: in
         "queries_attempted": len(selected),
         "products_available": len(grouped),
         "errors": len(errors),
-        "cve_candidates": sum(len(entry["cves"]) for entry in results),
+        "cve_candidates": len(all_cves),
+        "cpe_version_supported": document["summary"]["cpe_version_supported"],
+        "keyword_only": document["summary"]["keyword_only"],
     }
 
 
