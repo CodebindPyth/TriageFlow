@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Added `vhost_direct.py`, a standalone virtual-host discovery entry point that sends HTTP requests with changing Host headers through ffuf without pre-resolving each candidate with dnsx.
+- The direct utility asks for authorization, validates single-label wordlist entries, caps request rate and runtime, and writes CSV/JSON/text results plus an ffuf log.
+
 ## 2.0.4 — 2026-10-11
 
 ### Fixed
