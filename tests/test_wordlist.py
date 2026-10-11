@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 
 from triageflow import (
