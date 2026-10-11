@@ -1,2 +1,2 @@
-# TriageFlow uses Python standard-library modules only.
-# Install external CLI tools separately: httpx (ProjectDiscovery), nuclei, subfinder, gowitness.
+# Python standard library only.
+# Go-based CLI tools are installed separately as needed: httpx, nuclei, subfinder, dnsx, gowitness.
