@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.7 — 2026-10-11
+
+### Fixed
+- Print a progress heartbeat every 10 seconds for long-running external tools instead of leaving the terminal silent while waiting.
+- During the httpx stage, report the number of JSONL result records saved incrementally and show the combined target count and elapsed runtime.
+- Stop and clean up the child process when Ctrl+C interrupts a running pipeline stage.
+- Added a regression test for heartbeat output and incremental JSONL record counting.
+
 ## 2.0.6 — 2026-10-11
 
 ### Fixed
