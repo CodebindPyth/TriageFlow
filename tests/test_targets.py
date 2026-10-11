@@ -1,6 +1,12 @@
 import unittest
 
-from triageflow import hostname_of, is_ip, parse_dns_resolvers
+from triageflow import (
+    base_url_for_root,
+    build_wordlist_candidates,
+    hostname_of,
+    is_ip,
+    parse_dns_resolvers,
+)
 
 
 class TargetParsingTests(unittest.TestCase):
@@ -21,6 +27,20 @@ class TargetParsingTests(unittest.TestCase):
 
     def test_hostname_with_port_drops_port_for_scope_checks(self):
         self.assertEqual(hostname_of("app.example.test:8443"), "app.example.test")
+
+
+    def test_wordlist_candidates_are_valid_and_stay_in_scope(self):
+        candidates = build_wordlist_candidates(
+            ["example.test"],
+            ["admin", "api.example.test", "other.example.org", "bad_name", "-bad", "admin"],
+        )
+        self.assertEqual(candidates, ["admin.example.test", "api.example.test"])
+
+    def test_base_url_matches_normalized_www_root(self):
+        self.assertEqual(
+            base_url_for_root("example.test", ["https://www.example.test/path"]),
+            "https://www.example.test/",
+        )
 
     def test_dns_resolvers_skip_link_local_scoped_ipv6(self):
         resolvers = parse_dns_resolvers(
