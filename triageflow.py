@@ -21,6 +21,12 @@ from triageflow_enrichment import (
     read_httpx_jsonl,
     write_software_inventory,
 )
+from triageflow_reports import (
+    generate_html_report,
+    read_csv_rows,
+    write_asset_inventory,
+    write_default_credentials_review,
+)
 
 VERSION = "2.0.0"
 GO_BIN = Path.home() / "go" / "bin"
@@ -148,6 +154,11 @@ def run_step(name: str, command: list[str], log_path: Path) -> int:
 
 
 def save_report(out_dir: Path, status: dict) -> None:
+    # Always generate the manual-only default-credential checklist; this never submits credentials.
+    panels = read_csv_rows(out_dir / "login-panels.csv")
+    fingerprints = read_csv_rows(out_dir / "software-inventory.csv")
+    reviews = write_default_credentials_review(panels, fingerprints, out_dir)
+    status["default_credential_review_count"] = len(reviews)
     status["finished_utc"] = datetime.now(timezone.utc).isoformat()
     (out_dir / "summary.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     summary = [
@@ -183,6 +194,16 @@ def save_report(out_dir: Path, status: dict) -> None:
         "Only assess targets within your written authorization and scope.", ""
     ]
     (out_dir / "README.md").write_text("\n".join(summary), encoding="utf-8")
+    if status.get("html_report_enabled", True):
+        try:
+            report_path = generate_html_report(out_dir, status)
+            print(f"[+] HTML report: {report_path}")
+        except OSError as exc:
+            status["html_report_error"] = str(exc)
+            (out_dir / "summary.json").write_text(
+                json.dumps(status, indent=2), encoding="utf-8"
+            )
+            print(f"[!] Could not create HTML report: {exc}")
 
 
 def prompt_choice(prompt: str, choices: dict[str, str], default: str) -> str:
@@ -438,8 +459,10 @@ def main() -> int:
         httpx_url(record) for record in httpx_records if httpx_url(record)
     ))
     write_lines(live_file, live)
+    assets = write_asset_inventory(httpx_records, out_dir / "asset-inventory.csv")
     fingerprints = write_software_inventory(httpx_records, out_dir / "software-inventory.csv")
     status["live_url_count"] = len(live)
+    status["asset_count"] = len(assets)
     status["software_fingerprint_count"] = len(fingerprints)
     if not live:
         print("[!] No live web URLs found or httpx JSON output could not be parsed; downstream stages skipped.")
@@ -511,6 +534,10 @@ def main() -> int:
     print(f"    Live URLs: {live_file}")
     print(f"    Summary: {out_dir / 'README.md'}")
     print(f"    JSON report: {out_dir / 'summary.json'}")
+    if status.get("html_report_enabled", True):
+        print(f"    HTML report: {out_dir / 'report.html'}")
+    print(f"    Asset inventory: {out_dir / 'asset-inventory.csv'}")
+    print(f"    Default-credential review: {out_dir / 'default-credentials-review.md'}")
     if failures:
         print("[!] Failed stage(s): " + ", ".join(failures))
         return 1
