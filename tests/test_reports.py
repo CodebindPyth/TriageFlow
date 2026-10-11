@@ -74,7 +74,7 @@ class V2ReportTests(unittest.TestCase):
                     "redirect_location": "",
                 })
             report = generate_html_report(out, {
-                "version": "2.0.0",
+                "version": "9.8.7",
                 "finished_utc": "2026-10-11T00:00:00Z",
                 "target_count": 1,
                 "live_url_count": 1,
@@ -85,7 +85,9 @@ class V2ReportTests(unittest.TestCase):
                 "stages": {},
             })
             text = report.read_text(encoding="utf-8")
-            self.assertIn("TriageFlow v2", text)
+            self.assertIn("TriageFlow v9.8.7 — Recon Report", text)
+            self.assertIn("<title>TriageFlow v9.8.7 Security Recon Report</title>", text)
+            self.assertNotIn("TriageFlow v2.0.1", text)
             self.assertIn("HTTP virtual hosts", text)
             self.assertIn("portal.example.test", text)
             self.assertNotIn("<script>alert", text)
