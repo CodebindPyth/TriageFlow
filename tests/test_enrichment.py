@@ -32,6 +32,21 @@ class FingerprintTests(unittest.TestCase):
         php_rows = [row for row in fingerprints if row["product"] == "PHP"]
         self.assertEqual(len(php_rows), 1)
 
+    def test_same_product_from_tech_and_webserver_is_merged(self):
+        record = {
+            "url": "https://example.test",
+            "tech": ["OpenResty", "jQuery:3.6.4"],
+            "webserver": "openresty",
+            "server": "OpenResty",
+        }
+        fingerprints = collect_fingerprints([record])
+        openresty_rows = [
+            row for row in fingerprints if row["product"].casefold() == "openresty"
+        ]
+        self.assertEqual(len(openresty_rows), 1)
+        self.assertEqual(openresty_rows[0]["source"], "tech; webserver; server")
+        self.assertEqual(openresty_rows[0]["raw_fingerprint"], "OpenResty | openresty")
+
     def test_cpe_exact_version_is_prioritized(self):
         cve = {"configurations": [{"nodes": [{"cpeMatch": [{
             "criteria": "cpe:2.3:a:wordpress:wordpress:6.4.3:*:*:*:*:*:*:*",
