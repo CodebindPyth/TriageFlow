@@ -7,7 +7,6 @@ import ipaddress
 import json
 import os
 import shutil
-import socket
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -34,6 +33,7 @@ GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
     "nuclei": "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
     "subfinder": "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
+    "dnsx": "github.com/projectdiscovery/dnsx/cmd/dnsx@latest",
     "gowitness": "github.com/sensepost/gowitness@latest",
 }
 
@@ -102,34 +102,134 @@ def hostname_of(target: str) -> str:
     return target.split(":", 1)[0].strip("[]").lower().rstrip(".")
 
 
-def discover_wordlist(root_domains: list[str], wordlist: Path, out_dir: Path) -> list[str]:
-    """Create subdomain candidates and retain names that resolve with system DNS."""
-    words = read_lines(wordlist)
+def system_dns_resolvers() -> list[str]:
+    """Read configured unicast DNS servers so private lab zones can be queried."""
+    resolver_file = Path("/etc/resolv.conf")
+    resolvers = []
+    try:
+        for line in resolver_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2 and parts[0].lower() == "nameserver":
+                server = parts[1].strip()
+                try:
+                    ipaddress.ip_address(server)
+                except ValueError:
+                    continue
+                if server not in resolvers:
+                    resolvers.append(server)
+    except OSError:
+        pass
+    return resolvers
+
+
+def build_wordlist_candidates(root_domains: list[str], words: list[str]) -> list[str]:
+    """Build valid in-scope host candidates; ignore malformed and out-of-scope full hostnames."""
     candidates: list[str] = []
-    for root in root_domains:
+    seen = set()
+    for root_value in root_domains:
+        root = root_value.lower().strip().rstrip(".")
+        if not root:
+            continue
         for word in words:
-            name = word.lower().rstrip(".")
-            if "://" in name or "/" in name or " " in name:
+            name = word.strip().lower().rstrip(".")
+            if not name or "://" in name or "/" in name or " " in name or "@" in name:
                 continue
             if name == root or name.endswith("." + root):
                 candidate = name
+            elif "." in name:
+                # A full hostname for a different domain must not escape the selected scope.
+                continue
             else:
                 candidate = f"{name}.{root}"
-            if candidate not in candidates:
-                candidates.append(candidate)
+            labels = candidate.split(".")
+            if any(
+                not label
+                or len(label) > 63
+                or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+                for label in labels
+            ):
+                continue
+            if len(candidate) > 253 or candidate in seen:
+                continue
+            seen.add(candidate)
+            candidates.append(candidate)
+    return candidates
 
-    resolved: list[str] = []
-    for name in candidates:
-        try:
-            socket.getaddrinfo(name, None, type=socket.SOCK_STREAM)
-            resolved.append(name)
-        except OSError:
-            pass
 
-    write_lines(out_dir / "wordlist-candidates.txt", candidates)
-    write_lines(out_dir / "wordlist-resolved.txt", resolved)
-    print(f"[+] Wordlist candidates: {len(candidates)}; DNS-resolving: {len(resolved)}")
+def discover_wordlist(
+    root_domains: list[str],
+    wordlist: Path,
+    out_dir: Path,
+    dns_resolvers: list[str] | None = None,
+    dns_threads: int = 100,
+    dns_timeout: int = 2,
+) -> list[str]:
+    """Build candidates, then resolve them in parallel with ProjectDiscovery dnsx.
+
+    Unlike repeated socket.getaddrinfo calls, dnsx bounds DNS wait time and resolves
+    many candidates concurrently. The system's resolvers are preferred for private labs.
+    """
+    words = read_lines(wordlist)
+    candidates = build_wordlist_candidates(root_domains, words)
+    candidates_path = out_dir / "wordlist-candidates.txt"
+    resolved_path = out_dir / "wordlist-resolved.txt"
+    log_path = out_dir / "dnsx.log"
+    write_lines(candidates_path, candidates)
+    write_lines(resolved_path, [])
+
+    print(f"[+] Wordlist candidates: {len(candidates)}")
+    if not candidates:
+        print("[!] No valid candidates were generated; check the target and wordlist format.")
+        return []
+
+    if not dns_resolvers:
+        dns_resolvers = system_dns_resolvers()
+    cmd = [
+        "dnsx", "-l", str(candidates_path), "-silent", "-no-color",
+        "-timeout", str(dns_timeout), "-retry", "1", "-t", str(dns_threads),
+        "-hostsfile", "-o", str(resolved_path),
+    ]
+    if dns_resolvers:
+        cmd.extend(["-r", ",".join(dns_resolvers)])
+        print("[+] DNS resolvers: " + ", ".join(dns_resolvers))
+    else:
+        print(
+            "[WARN] No nameserver was read from /etc/resolv.conf. "
+            "dnsx will use its default resolvers; for a private lab, set --dns-resolvers."
+        )
+    print(
+        f"[+] Resolving {len(candidates)} candidates with dnsx "
+        f"(threads={dns_threads}, timeout={dns_timeout}s, retries=1)."
+    )
+    write_lines(log_path, ["COMMAND: " + " ".join(cmd)])
+    try:
+        with log_path.open("a", encoding="utf-8", errors="replace") as log:
+            process = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, text=True)
+            try:
+                rc = process.wait()
+            except KeyboardInterrupt:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                raise
+    except OSError as exc:
+        raise RuntimeError(
+            f"Could not start dnsx: {exc}. Check that dnsx is installed and on PATH."
+        ) from exc
+
+    if rc != 0:
+        raise RuntimeError(
+            f"dnsx exited with code {rc}; inspect {log_path}. "
+            "Try dnsx -h to verify flags for your installed version."
+        )
+    resolved = read_lines(resolved_path) if resolved_path.is_file() else []
+    print(f"[+] DNS-resolving candidates: {len(resolved)} / {len(candidates)}")
+    print(f"[+] Candidate lists: {candidates_path} and {resolved_path}")
     return resolved
+
 
 
 def run_step(name: str, command: list[str], log_path: Path) -> int:
@@ -179,6 +279,7 @@ def save_report(out_dir: Path, status: dict) -> None:
         "- root-domains.txt: supplied root domains",
         "- subdomains.txt: Subfinder results, if enabled",
         "- wordlist-candidates.txt and wordlist-resolved.txt: custom wordlist results, if used",
+        "- dnsx.log: bounded parallel DNS resolution for custom wordlist candidates",
         "- all-targets.txt: deduplicated target list",
         "- live.txt: live URLs from httpx; shared by Nuclei and GoWitness",
         "- httpx-details.jsonl: JSONL response and technology fingerprints",
@@ -322,6 +423,12 @@ def main() -> int:
     parser.add_argument("--no-subdomains", action="store_true", help="Skip Subfinder")
     parser.add_argument("--subfinder-all", action="store_true", help="Use all configured Subfinder sources")
     parser.add_argument("--timeout", type=int, default=10, help="httpx timeout in seconds")
+    parser.add_argument("--dns-threads", type=int, default=100,
+                        help="Parallel dnsx threads for the custom wordlist (default: 100)")
+    parser.add_argument("--dns-timeout", type=int, default=2,
+                        help="Per-query dnsx timeout in seconds (default: 2)")
+    parser.add_argument("--dns-resolvers",
+                        help="Comma-separated DNS resolver IPs; default reads /etc/resolv.conf")
     parser.add_argument("--no-nuclei", action="store_true", help="Skip Nuclei")
     parser.add_argument("--no-screenshots", action="store_true", help="Skip GoWitness")
     parser.add_argument("--no-login-check", action="store_true",
@@ -351,6 +458,20 @@ def main() -> int:
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1")
+    if args.dns_threads < 1:
+        parser.error("--dns-threads must be at least 1")
+    if args.dns_timeout < 1:
+        parser.error("--dns-timeout must be at least 1")
+    if args.dns_resolvers:
+        resolver_values = [value.strip() for value in args.dns_resolvers.split(",") if value.strip()]
+        if not resolver_values:
+            parser.error("--dns-resolvers must contain at least one IP address")
+        for resolver in resolver_values:
+            try:
+                ipaddress.ip_address(resolver)
+            except ValueError:
+                parser.error(f"Invalid DNS resolver IP: {resolver}")
+
     if args.max_login_hosts < 1:
         parser.error("--max-login-hosts must be at least 1")
     if args.max_cve_products < 1:
@@ -388,6 +509,8 @@ def main() -> int:
         required.append("gowitness")
     if not args.no_subdomains and roots:
         required.append("subfinder")
+    if wordlist and roots:
+        required.append("dnsx")
     missing = ensure_tools(required)
     if missing:
         print("[ERROR] Required tools unavailable; no scan started: " + ", ".join(missing))
@@ -441,10 +564,33 @@ def main() -> int:
 
     wordlist_names: list[str] = []
     if wordlist and roots:
+        if args.dns_resolvers:
+            resolvers = [value.strip() for value in args.dns_resolvers.split(",") if value.strip()]
+        else:
+            resolvers = system_dns_resolvers()
         try:
-            wordlist_names = discover_wordlist(roots, wordlist, out_dir)
-        except OSError as exc:
-            print(f"[ERROR] Cannot read wordlist: {exc}", file=sys.stderr)
+            wordlist_names = discover_wordlist(
+                roots, wordlist, out_dir,
+                dns_resolvers=resolvers,
+                dns_threads=args.dns_threads,
+                dns_timeout=args.dns_timeout,
+            )
+            status["stages"]["wordlist_dns"] = {
+                "status": "completed",
+                "candidates": len(read_lines(out_dir / "wordlist-candidates.txt")),
+                "resolved": len(wordlist_names),
+                "threads": args.dns_threads,
+                "timeout_seconds": args.dns_timeout,
+                "resolvers": resolvers or "dnsx defaults",
+            }
+        except KeyboardInterrupt:
+            status["stages"]["wordlist_dns"] = "interrupted by user"
+            print("\n[!] Wordlist DNS check interrupted. Saving partial results...")
+            save_report(out_dir, status)
+            return 130
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(f"[ERROR] Wordlist DNS resolution failed: {exc}", file=sys.stderr)
+            status["stages"]["wordlist_dns"] = {"status": "failed", "error": str(exc)}
             save_report(out_dir, status)
             return 2
 
@@ -542,6 +688,9 @@ def main() -> int:
     print(f"    Results directory: {out_dir}")
     print(f"    Combined targets: {combined_file}")
     print(f"    Live URLs: {live_file}")
+    if wordlist:
+        print(f"    Wordlist DNS results: {out_dir / 'wordlist-resolved.txt'}")
+        print(f"    DNS log: {out_dir / 'dnsx.log'}")
     print(f"    Summary: {out_dir / 'README.md'}")
     print(f"    JSON report: {out_dir / 'summary.json'}")
     if status.get("html_report_enabled", True):
@@ -555,4 +704,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("\n[!] Interrupted by user (Ctrl+C). Partial output files, if already written, have been retained.")
+        raise SystemExit(130)
