@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -814,7 +814,10 @@ def main() -> int:
                     status["vhost_count"] = len(vhost_rows)
                     vhost_hosts = [row["virtual_host"] for row in vhost_rows]
     elif wordlist and roots:
-        status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains)"
+        if not wordlist_names and not discovered:
+            status["stages"]["vhost_fuzz"] = "skipped by user after zero DNS results"
+        else:
+            status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains; use --vhost-fuzz to run both)"
 
     combined = list(dict.fromkeys(direct + roots + discovered + wordlist_names))
     combined_file, live_file = out_dir / "all-targets.txt", out_dir / "live.txt"
