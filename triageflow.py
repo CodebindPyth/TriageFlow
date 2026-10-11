@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.3"
+VERSION = "2.0.4"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -185,24 +185,38 @@ def hostname_of(target: str) -> str:
     return value.split(":", 1)[0].strip("[]").lower().rstrip(".")
 
 
-def system_dns_resolvers() -> list[str]:
-    """Read configured unicast DNS servers so private lab zones can be queried."""
-    resolver_file = Path("/etc/resolv.conf")
+def parse_dns_resolvers(contents: str) -> list[str]:
+    """Parse resolv.conf nameservers and skip scoped/link-local IPv6 addresses."""
     resolvers = []
-    try:
-        for line in resolver_file.read_text(encoding="utf-8", errors="replace").splitlines():
-            parts = line.strip().split()
-            if len(parts) >= 2 and parts[0].lower() == "nameserver":
-                server = parts[1].strip()
-                try:
-                    ipaddress.ip_address(server)
-                except ValueError:
-                    continue
-                if server not in resolvers:
-                    resolvers.append(server)
-    except OSError:
-        pass
+    for line in contents.splitlines():
+        parts = line.strip().split()
+        if len(parts) < 2 or parts[0].lower() != "nameserver":
+            continue
+        server = parts[1].strip()
+        # dnsx's comma-separated resolver list is not a reliable place to pass
+        # interface-scoped link-local addresses such as fe80::1%eth1.
+        if "%" in server:
+            continue
+        try:
+            address = ipaddress.ip_address(server)
+        except ValueError:
+            continue
+        if address.is_link_local or address.is_multicast or address.is_unspecified:
+            continue
+        if server not in resolvers:
+            resolvers.append(server)
     return resolvers
+
+
+def system_dns_resolvers() -> list[str]:
+    """Read usable DNS nameservers; ignore scoped/link-local IPv6 from VPN interfaces."""
+    try:
+        contents = Path("/etc/resolv.conf").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return []
+    return parse_dns_resolvers(contents)
 
 
 def build_wordlist_candidates(root_domains: list[str], words: list[str]) -> list[str]:
@@ -253,6 +267,8 @@ def discover_wordlist(
     many candidates concurrently. The system's resolvers are preferred for private labs.
     """
     words = read_lines(wordlist)
+    print(f"[+] Wordlist file: {wordlist}")
+    print(f"[+] Wordlist entries: {len(words)} non-empty, non-comment lines")
     candidates = build_wordlist_candidates(root_domains, words)
     candidates_path = out_dir / "wordlist-candidates.txt"
     resolved_path = out_dir / "wordlist-resolved.txt"
