@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from pathlib import Path
 
 from triageflow import (
     build_wordlist_candidates,
