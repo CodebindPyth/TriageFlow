@@ -270,15 +270,14 @@ def _page_title(body: str) -> str:
 def detect_login_panels(
     live_urls: list[str],
     output_path: Path,
-    max_hosts: int = 50,
-    timeout: float = 3.0,
+    max_hosts: int = 25,
+    timeout: float = 2.5,
 ) -> list[dict]:
-    """Use rate-bounded GET requests to identify likely login pages; never submit credentials."""
-    paths = [
-        "/", "/login", "/signin", "/sign-in", "/admin/login",
-        "/wp-login.php", "/user/login", "/administrator",
-    ]
-    opener = urllib.request.build_opener(_NoRedirect)
+    """Use bounded GET requests to identify likely login pages; never submit credentials."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    paths = ["/", "/login", "/signin", "/sign-in", "/admin/login",
+             "/wp-login.php", "/user/login", "/administrator"]
     origins = []
     for value in live_urls:
         candidate = value if value.startswith(("http://", "https://")) else f"http://{value}"
@@ -289,10 +288,11 @@ def detect_login_panels(
         if origin not in origins:
             origins.append(origin)
     origins = origins[:max(1, max_hosts)]
-    findings = []
-    seen_panels = set()
-    for origin in origins:
+
+    def probe_origin(origin: str) -> dict | None:
+        opener = urllib.request.build_opener(_NoRedirect)
         for path in paths:
+            time.sleep(0.05)
             target = urljoin(origin + "/", path.lstrip("/"))
             request = urllib.request.Request(
                 target,
@@ -316,30 +316,36 @@ def detect_login_panels(
 
             location = headers.get("Location", "") if headers else ""
             location_path = urlsplit(location).path if location else ""
+            redirect_to_login = (
+                status in (301, 302, 303, 307, 308)
+                and bool(LOGIN_PATH_RE.search(location_path))
+            )
             content_type = headers.get("Content-Type", "") if headers else ""
-            if body and content_type and "html" not in content_type.lower():
+            if body and content_type and "html" not in content_type.lower() and not redirect_to_login:
                 continue
+
             title = _page_title(body)
             has_password = bool(PASSWORD_INPUT_RE.search(body))
             has_form = bool(re.search(r"<form\b", body, re.I))
             login_words = bool(LOGIN_WORD_RE.search(re.sub(r"<[^>]+>", " ", body)))
             route_hint = bool(LOGIN_PATH_RE.search(urlsplit(target).path))
-            redirect_to_login = status in (301, 302, 303, 307, 308) and bool(LOGIN_PATH_RE.search(location_path))
             if not (has_password or redirect_to_login or (route_hint and has_form and login_words)):
                 continue
-            panel_url = urljoin(target, location) if redirect_to_login else target
-            dedupe_key = (origin, panel_url)
-            if dedupe_key in seen_panels:
-                continue
-            seen_panels.add(dedupe_key)
+
+            panel_url = target
             evidence = []
             if has_password:
                 evidence.append("password input field")
             if redirect_to_login:
-                evidence.append(f"redirect to {location_path or location}")
+                redirected_url = urljoin(target, location)
+                if urlsplit(redirected_url).netloc.lower() == urlsplit(origin).netloc.lower():
+                    panel_url = redirected_url
+                    evidence.append(f"redirect to {location_path or location}")
+                else:
+                    evidence.append("login-like redirect to another host (not followed)")
             if route_hint and has_form and login_words:
                 evidence.append("login-like route with form and login terms")
-            findings.append({
+            return {
                 "origin": origin,
                 "login_url": panel_url,
                 "detected_from": target,
@@ -347,8 +353,12 @@ def detect_login_panels(
                 "title": title,
                 "evidence": "; ".join(evidence),
                 "credentials_submitted": False,
-            })
-            break
+            }
+        return None
+
+    # Bound concurrency so one unresponsive origin does not stall the whole run.
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        findings = [item for item in pool.map(probe_origin, origins) if item is not None]
 
     fields = ["origin", "login_url", "detected_from", "status_code", "title", "evidence", "credentials_submitted"]
     with output_path.open("w", newline="", encoding="utf-8") as stream:
