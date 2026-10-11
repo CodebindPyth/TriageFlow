@@ -393,6 +393,16 @@ def main() -> int:
         print("[ERROR] Required tools unavailable; no scan started: " + ", ".join(missing))
         return 2
 
+    if not args.no_screenshots and not any(
+        shutil.which(browser) for browser in (
+            "chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome"
+        )
+    ):
+        print(
+            "[WARN] Screenshots are enabled, but Chrome/Chromium was not found in PATH. "
+            "GoWitness may fail; install a supported browser or rerun with --no-screenshots."
+        )
+
     print(f"TriageFlow v{VERSION} — authorized testing only")
     print(f"Input targets: {len(targets)}; root domains: {len(roots)}")
     print("All live URLs reported by httpx will be passed to enabled downstream stages.")
