@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.5"
+VERSION = "2.0.6"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -345,7 +345,9 @@ def discover_wordlist(
 def base_url_for_root(root: str, targets: list[str]) -> str:
     """Pick the supplied HTTP URL for a root, or use plain HTTP as a fallback."""
     for target in targets:
-        if hostname_of(target) != root:
+        target_host = hostname_of(target)
+        normalized_host = target_host[4:] if target_host.startswith("www.") else target_host
+        if normalized_host != root:
             continue
         if "://" in target:
             parsed = urlparse(target)
@@ -756,9 +758,14 @@ def main() -> int:
             parser.error("--dns-resolvers must contain at least one IP address")
         for resolver in resolver_values:
             try:
-                ipaddress.ip_address(resolver)
+                address = ipaddress.ip_address(resolver)
             except ValueError:
                 parser.error(f"Invalid DNS resolver IP: {resolver}")
+            if "%" in resolver or address.is_link_local or address.is_multicast or address.is_unspecified:
+                parser.error(
+                    f"Unusable DNS resolver address: {resolver}. "
+                    "Provide an unscoped, non-link-local resolver IP."
+                )
 
     if args.max_login_hosts < 1:
         parser.error("--max-login-hosts must be at least 1")
