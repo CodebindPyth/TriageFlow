@@ -308,7 +308,7 @@ def discover_wordlist(
             try:
                 while True:
                     try:
-                        rc = process.wait(timeout=10)
+                        rc = process.wait(timeout=heartbeat_interval)
                         break
                     except subprocess.TimeoutExpired:
                         elapsed = int(time.monotonic() - started)
@@ -479,6 +479,7 @@ def run_step(
     command: list[str],
     log_path: Path,
     progress_file: Path | None = None,
+    heartbeat_interval: float = 10.0,
 ) -> int:
     """Run an external tool, log its output, and print a heartbeat while it works.
 
