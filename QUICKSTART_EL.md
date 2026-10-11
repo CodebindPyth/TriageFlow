@@ -1,4 +1,4 @@
-# TriageFlow v2.0.0 — Οδηγός χρήσης στα Ελληνικά
+# TriageFlow v2.0.1 — Οδηγός χρήσης στα Ελληνικά
 
 Αυτός είναι ο πρακτικός οδηγός για να ξεκινήσεις χωρίς να χρειάζεται να θυμάσαι παραμέτρους ή να γράφεις μεγάλες εντολές.
 
@@ -185,7 +185,7 @@ go version
 
 ### Δεν βρίσκει subdomains ή φαίνεται να κολλάει στο wordlist
 
-Η v2 χρησιμοποιεί `dnsx` για παράλληλα DNS checks και γράφει progress στο terminal και διαγνωστικά στο `dnsx.log`. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιούργησε από το wordlist· το `wordlist-resolved.txt` έχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια από αυτά έχουν HTTP/HTTPS υπηρεσία.
+Η v2.0.1 χρησιμοποιεί `dnsx` για παράλληλα DNS checks και γράφει μηνύματα προόδου στο terminal και διαγνωστικά στο `dnsx.log`. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιούργησε από το wordlist· το `wordlist-resolved.txt` έχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια από αυτά έχουν HTTP/HTTPS υπηρεσία.
 
 Αν δουλεύεις με lab domain όπως `inlanefreight.local`, βεβαιώσου ότι το Kali χρησιμοποιεί τον DNS resolver του lab. Εξ ορισμού η v2 διαβάζει τους resolvers από `/etc/resolv.conf` και ελέγχει και το system hosts file. Αν το lab δίνει διαφορετικό DNS server, πέρασέ τον ρητά, π.χ.:
 
@@ -196,6 +196,34 @@ python3 triageflow.py -u inlanefreight.local -w /home/kali/SecLists/Discovery/DN
 Αντικατάστησε το `10.0.0.1` με την πραγματική DNS IP που παρέχει το lab. Μην υποθέτεις ότι αυτή η IP είναι σωστή για το δικό σου περιβάλλον.
 
 Το `.local` συνήθως ανήκει σε εσωτερικό/lab namespace, οπότε το Subfinder μπορεί να μην επιστρέψει παθητικά subdomains από δημόσιες πηγές. Επίσης, το ότι ένα όνομα απαντά στο DNS δεν σημαίνει ότι έχει web service· αυτό ελέγχεται στο επόμενο στάδιο με httpx.
+
+# TriageFlow v2.0.1 — Οδηγός χρήσης στα Ελληνικά
+
+Αυτός είναι ο πρακτικός οδηγός για να ξεκινήσεις χωρίς να χρειάζεται να θυμάσαι παραμέτρους ή να γράφεις μεγάλες εντολές.
+
+> **Χρησιμοποίησέ το μόνο** σε συστήματα που σου ανήκουν ή για τα οποία έχεις ρητή εξουσιοδότηση.
+
+## DNS wordlist και virtual hosts
+
+Η v2.0.1 χρησιμοποιεί το `dnsx` για παράλληλα DNS checks, με timeout ανά ερώτημα και μηνύματα προόδου. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιουργήθηκαν από το wordlist· το `wordlist-resolved.txt` περιέχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια έχουν HTTP/HTTPS υπηρεσία.
+
+Σε εργαστήρια όπως το `inlanefreight.local`, μπορεί να υπάρχουν virtual hosts που επιλέγονται από το HTTP `Host` header χωρίς να έχουν ξεχωριστές DNS εγγραφές. Αν Subfinder και DNS wordlist δεν βρουν subdomains, το TriageFlow ρωτά αν θέλεις να συνεχίσει με `ffuf` για virtual-host discovery. Πληκτρολόγησε `YES` για να το εγκρίνεις.
+
+Για να εκτελέσεις ρητά το virtual-host discovery μαζί με το DNS check:
+
+```bash
+python3 triageflow.py -u http://inlanefreight.local/ --no-subdomains \
+  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt \
+  --vhost-fuzz
+```
+
+Χρησιμοποίησέ το μόνο στο εγκεκριμένο lab. Το `ffuf` στέλνει HTTP αιτήματα με διαφορετικές τιμές στο `Host` header. Η προεπιλεγμένη ταχύτητα είναι έως 100 requests/s και ο μέγιστος χρόνος είναι 120 δευτερόλεπτα ανά root. Τα ευρήματα αποθηκεύονται στα `vhost-findings.csv`, `vhost-findings.json` και `vhost-subdomains.txt`.
+
+Τα virtual-host ονόματα μπορεί να μην επιλύονται μέσω DNS. Για αυτό, δεν μπαίνουν αυτόματα στο `live.txt` ούτε στα GoWitness screenshots· τα αποτελέσματά τους παρουσιάζονται ξεχωριστά στο `report.html`.
+
+Το `--no-subdomains` παραλείπει το Subfinder, αλλά δεν απενεργοποιεί το custom wordlist ή το DNS check. Σε private `.local` namespaces, οι δημόσιες παθητικές πηγές του Subfinder συχνά δεν έχουν χρήσιμες εγγραφές.
+
+Για τις υπόλοιπες οδηγίες χρήσης, εγκατάστασης και troubleshooting, συνέχισε από τις επόμενες ενότητες αυτού του οδηγού.
 
 ### Το NVD δεν επιστρέφει αποτελέσματα ή εμφανίζει rate limit
 
