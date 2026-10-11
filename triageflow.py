@@ -196,7 +196,7 @@ def main() -> int:
     parser.add_argument("--no-screenshots", action="store_true", help="Skip GoWitness")
     parser.add_argument("--no-login-check", action="store_true",
                         help="Skip bounded GET-only login-panel discovery")
-    parser.add_argument("--max-login-hosts", type=int, default=50,
+    parser.add_argument("--max-login-hosts", type=int, default=25,
                         help="Maximum distinct live origins checked for login panels (default: 50)")
     parser.add_argument("--no-cve-lookup", action="store_true",
                         help="Skip NVD lookups for observed product/version candidates")
@@ -328,7 +328,7 @@ def main() -> int:
         try:
             panels = detect_login_panels(
                 live, out_dir / "login-panels.csv",
-                max_hosts=args.max_login_hosts, timeout=min(float(args.timeout), 5.0),
+                max_hosts=args.max_login_hosts, timeout=min(float(args.timeout), 2.5),
             )
             status["login_panel_count"] = len(panels)
             status["stages"]["login_panels"] = {"status": "completed", "found": len(panels)}
