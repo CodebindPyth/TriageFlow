@@ -54,7 +54,7 @@ https://staging.example.com
 - **2 — Δικό σου wordlist:** δώσε τη διαδρομή του αρχείου.
 - **3 — Κανένα:** παραλείπει το wordlist. Μπορεί να συνεχίσει το Subfinder, εφόσον είναι ενεργό το επιλεγμένο προφίλ.
 
-Ένα wordlist περιέχει ένα όνομα ή label ανά γραμμή, π.χ. `dev`, `api`, `staging`. Δεν είναι λίστα με κωδικούς.
+Ένα wordlist περιέχει ένα όνομα ή label ανά γραμμή, π.χ. `dev`, `api`, `staging`. Δεν είναι λίστα με κωδικούς. Στη v2, το DNS γίνεται παράλληλα με το ProjectDiscovery `dnsx` (100 workers, timeout 2 δευτερολέπτων, μία προσπάθεια), αντί για 5.000 σειριακές κλήσεις που μπορεί να φαίνονται κολλημένες. Αν λείπει το dnsx, το πρόγραμμα θα προσπαθήσει να το εγκαταστήσει με Go.
 
 ### Βήμα C — Ποιο προφίλ;
 
@@ -182,6 +182,20 @@ go version
 ### «Required tools unavailable» ή εργαλείο που λείπει
 
 Διάβασε ποια ονόματα εργαλείων αναφέρονται στο μήνυμα. Έλεγξε ότι υπάρχει Go με `go version`, ότι υπάρχει σύνδεση Internet και ξανατρέξε το TriageFlow. Αν συνεχίζει να αποτυγχάνει, δες το σχετικό `*.log` ή το μήνυμα εγκατάστασης.
+
+### Δεν βρίσκει subdomains ή φαίνεται να κολλάει στο wordlist
+
+Η v2 χρησιμοποιεί `dnsx` για παράλληλα DNS checks και γράφει progress στο terminal και διαγνωστικά στο `dnsx.log`. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιούργησε από το wordlist· το `wordlist-resolved.txt` έχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια από αυτά έχουν HTTP/HTTPS υπηρεσία.
+
+Αν δουλεύεις με lab domain όπως `inlanefreight.local`, βεβαιώσου ότι το Kali χρησιμοποιεί τον DNS resolver του lab. Εξ ορισμού η v2 διαβάζει τους resolvers από `/etc/resolv.conf` και ελέγχει και το system hosts file. Αν το lab δίνει διαφορετικό DNS server, πέρασέ τον ρητά, π.χ.:
+
+```bash
+python3 triageflow.py -u inlanefreight.local -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt --dns-resolvers 10.0.0.1
+```
+
+Αντικατάστησε το `10.0.0.1` με την πραγματική DNS IP που παρέχει το lab. Μην υποθέτεις ότι αυτή η IP είναι σωστή για το δικό σου περιβάλλον.
+
+Το `.local` συνήθως ανήκει σε εσωτερικό/lab namespace, οπότε το Subfinder μπορεί να μην επιστρέψει παθητικά subdomains από δημόσιες πηγές. Επίσης, το ότι ένα όνομα απαντά στο DNS δεν σημαίνει ότι έχει web service· αυτό ελέγχεται στο επόμενο στάδιο με httpx.
 
 ### Το NVD δεν επιστρέφει αποτελέσματα ή εμφανίζει rate limit
 
