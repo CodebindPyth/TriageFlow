@@ -1,4 +1,4 @@
-# TriageFlow v2.0.2
+# TriageFlow v2.0.3
 
 **TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
@@ -76,11 +76,11 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
           Logs + summary
 ```
 
-Subfinder and the custom wordlist are complementary. If discovery is disabled with `--no-subdomains`, the wordlist can still be used; Subfinder will be skipped. Wordlist DNS resolution is a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
+Subfinder and the wordlist are complementary. In direct CLI mode, the bundled wordlist runs first by default; the wizard lets you choose whether to use it. `--no-subdomains` skips Subfinder but still uses the wordlist, while `--no-wordlist` skips the bundled default. DNS resolution is only a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
 
 ## What is new in v2?
 
-- **Faster wordlist DNS resolution:** custom wordlists use ProjectDiscovery `dnsx` to query candidates concurrently (default 100 threads, one attempt, 2-second per-query timeout) instead of blocking on sequential Python DNS lookups. A progress message is printed every 10 seconds if a DNS pass is still running. Wildcard DNS filtering is enabled to reduce false positives. If missing, `dnsx` is installed through Go when available.
+- **Wordlist-first discovery:** direct CLI runs automatically use the bundled `wordlists/subdomains-small.txt` when `-w` is omitted. DNS checks for those wordlist candidates run before Subfinder. Resolved wordlist names are placed in `all-targets.txt` before passive Subfinder results and are passed to httpx, then to later stages if they respond. Use `-w /path/to/wordlist.txt` for a larger list, or `--no-wordlist` to skip the bundled default. DNS checks use ProjectDiscovery `dnsx` concurrently (100 threads, one attempt, 2-second per-query timeout) with progress messages and wildcard filtering.
 - **Private/lab DNS:** the resolver list is read from `/etc/resolv.conf` where available, and the system hosts file is also checked. For an unusual lab setup, use `--dns-resolvers 10.0.0.1` with the DNS server supplied by the lab.
 - **Virtual-host fallback:** DNS enumeration cannot discover a web virtual host that has no DNS record. If both Subfinder and wordlist DNS return no subdomains, TriageFlow asks whether you want ffuf to test HTTP `Host` headers using the same wordlist. Confirm only if this is an authorized target. Add `--vhost-fuzz` to run this stage explicitly regardless of DNS results. Vhost-only names may not be DNS-resolvable and therefore are not automatically included in `live.txt` or GoWitness screenshots.
 - **Guided screenshot choice:** during interactive setup, choose whether GoWitness should capture screenshots. In the Standard profile screenshots default to yes; in Quick they default to no, but you can change that answer.
@@ -88,7 +88,6 @@ Subfinder and the custom wordlist are complementary. If discovery is disabled wi
 - **Asset inventory:** `asset-inventory.csv` includes observed URL, hostname, IPs when available, status, title, server, technologies, CNAME and CDN fields when supplied by httpx.
 - **Better CVE triage:** each CVE candidate gets a per-result label. Where NVD CPE applicability data is present, TriageFlow checks whether the observed product/version fits the advertised criteria. These checks are heuristic hints, not a final version-range verdict; vendor advisories remain authoritative.
 - **Default-account hygiene report:** found login panels are paired with recognizable software fingerprints where possible and produce a vendor-guidance checklist. TriageFlow does **not** submit default credentials or run credential spraying. Use an approved, controlled configuration audit to validate authentication settings.
-- **Virtual-host fallback:** if DNS and Subfinder return no names, the program offers ffuf Host-header discovery as a separate mode. This can find application virtual hosts without DNS records. It uses a configurable request rate and maximum runtime; explicit authorization is required.
 - **Versioning and tests:** `python3 triageflow.py --version` reports the version; unit tests cover fingerprinting, CPE triage labels, wizard options, reports, and virtual-host output files.
 
 ## Enrichment features
@@ -106,7 +105,7 @@ Subfinder and the custom wordlist are complementary. If discovery is disabled wi
 - Go (needed only if you want TriageFlow to attempt automatic installation of missing Go-based tools)
 - Chrome or Chromium when screenshots are enabled, plus the applicable GoWitness CLI
 - ProjectDiscovery `httpx`, `nuclei`, `subfinder`, and `gowitness`, depending on which stages you want to run
-- ProjectDiscovery `dnsx` when you use a custom subdomain wordlist
+- ProjectDiscovery `dnsx` when wordlist discovery is enabled (the bundled wordlist is the direct-CLI default)
 - `ffuf` when you enable virtual-host discovery or accept its fallback prompt
 - Network/DNS access appropriate to your authorized environment
 
@@ -140,7 +139,7 @@ The Python code uses standard-library modules only; Go-based recon tools are ins
 For direct CLI use:
 
 ```bash
-# One authorized domain; Subfinder discovery enabled
+# One authorized domain; bundled wordlist runs first, followed by Subfinder
 python3 triageflow.py -u example.com
 
 # One authorized domain, ask Subfinder to use all configured sources
@@ -153,8 +152,11 @@ python3 triageflow.py -u example.com -w ./wordlists/subdomains-small.txt
 python3 triageflow.py -u inlanefreight.local --no-subdomains \
   -w /path/to/subdomains-top1million-5000.txt --vhost-fuzz
 
-# Combine Subfinder and custom wordlist discovery
+# Use a custom wordlist first, then add Subfinder results
 python3 triageflow.py -u example.com --subfinder-all -w ./wordlists/subdomains-small.txt
+
+# Skip the bundled wordlist for this run
+python3 triageflow.py -u example.com --no-wordlist
 
 # Multiple targets (one URL, hostname, or IP per line)
 python3 triageflow.py -l targets.txt
@@ -178,9 +180,10 @@ python3 triageflow.py -u example.com --no-html-report
 |---|---|
 | `-u`, `--url` | One domain, hostname, IP, or URL to process. |
 | `-l`, `--list` | Input file containing one target per line; blank lines and `#` comments are ignored. |
-| `-w`, `--wordlist` | Custom subdomain wordlist, one label or hostname per line. Candidates are resolved concurrently with dnsx and wildcard DNS is filtered. |
+| `-w`, `--wordlist` | Custom subdomain wordlist, one label or hostname per line. Runs before Subfinder; resolved candidates are passed to httpx. |
 | `-o`, `--output` | Base directory for results; each run gets its own timestamped subdirectory. |
 | `--no-subdomains` | Skip Subfinder. Direct targets and any `-w` candidates can still be processed. |
+| `--no-wordlist` | Skip the bundled default wordlist. Cannot be combined with `-w`. |
 | `--subfinder-all` | Pass Subfinder's `-all` option. |
 | `--severity` | Comma-separated Nuclei severities; default is `medium,high,critical`. |
 | `--timeout` | httpx timeout in seconds; default is `10`. |
