@@ -111,6 +111,21 @@ def bundled_wordlist_path() -> Path:
     return Path(__file__).resolve().parent / "wordlists" / "subdomains-small.txt"
 
 
+def discover_default_wordlist(candidates: list[Path] | None = None) -> Path | None:
+    """Prefer an existing local SecLists DNS wordlist, then fall back to the bundled list."""
+    if candidates is None:
+        home = Path.home()
+        seclists_name = Path("Discovery") / "DNS" / "subdomains-top1million-5000.txt"
+        candidates = [
+            Path("/usr/share/seclists") / seclists_name,
+            home / "SecLists" / seclists_name,
+            home / "seclists" / seclists_name,
+            Path("/usr/share/SecLists") / seclists_name,
+            bundled_wordlist_path(),
+        ]
+    return next((path.expanduser() for path in candidates if path.is_file()), None)
+
+
 def combine_targets(
     direct: list[str],
     roots: list[str],
@@ -562,18 +577,22 @@ def interactive_setup(args: argparse.Namespace) -> bool:
         args.single_target = None
 
     if not args.wordlist and not getattr(args, "no_wordlist", False):
-        bundled_wordlist = bundled_wordlist_path()
+        default_wordlist = discover_default_wordlist()
         wordlist_mode = prompt_choice(
             "Subdomain wordlist?",
-            {"1": "use included small wordlist", "2": "use my own wordlist", "3": "none"},
+            {
+                "1": "use detected local list (SecLists if installed; otherwise bundled list)",
+                "2": "use my own wordlist",
+                "3": "none",
+            },
             "1",
         )
         if wordlist_mode == "1":
-            if bundled_wordlist.is_file():
-                args.wordlist = str(bundled_wordlist)
-                print(f"Using included wordlist: {bundled_wordlist}")
+            if default_wordlist is not None:
+                args.wordlist = str(default_wordlist)
+                print(f"Using detected wordlist: {default_wordlist}")
             else:
-                print("Included wordlist not found; wordlist discovery will be skipped.")
+                print("No default wordlist was found; wordlist discovery will be skipped.")
         elif wordlist_mode == "2":
             custom_path = input("Path to your wordlist (one label per line): ").strip()
             if custom_path:
@@ -684,10 +703,10 @@ def main() -> int:
     # For non-interactive CLI use, start with the included wordlist unless disabled.
     # The wizard keeps its own explicit yes/no choice.
     if not wizard_mode and not args.wordlist and not args.no_wordlist:
-        default_wordlist = bundled_wordlist_path()
-        if default_wordlist.is_file():
+        default_wordlist = discover_default_wordlist()
+        if default_wordlist is not None:
             args.wordlist = str(default_wordlist)
-            print(f"[+] Using bundled starter wordlist: {default_wordlist}")
+            print(f"[+] Using detected default wordlist: {default_wordlist}")
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1")
