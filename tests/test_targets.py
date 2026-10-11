@@ -24,11 +24,11 @@ class TargetParsingTests(unittest.TestCase):
 
     def test_dns_resolvers_skip_link_local_scoped_ipv6(self):
         resolvers = parse_dns_resolvers(
-            "nameserver 172.20.10.1\\n"
-            "nameserver fe80::8820:dff:fe52:5d64%eth1\\n"
-            "nameserver fe80::1\\n"
-            "nameserver 2001:4860:4860::8888\\n"
-            "nameserver 172.20.10.1\\n"
+            "nameserver 172.20.10.1\n"
+            "nameserver fe80::8820:dff:fe52:5d64%eth1\n"
+            "nameserver fe80::1\n"
+            "nameserver 2001:4860:4860::8888\n"
+            "nameserver 172.20.10.1\n"
         )
         self.assertEqual(resolvers, ["172.20.10.1", "2001:4860:4860::8888"])
 
