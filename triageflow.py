@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.6"
+VERSION = "2.0.7"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -474,25 +474,73 @@ def write_vhost_outputs(rows: list[dict], out_dir: Path) -> None:
     )
 
 
-def run_step(name: str, command: list[str], log_path: Path) -> int:
-    """Run one external tool and preserve stdout/stderr in a log."""
-    print(f"\n[+] {name}\n    $ {' '.join(command)}")
+def run_step(
+    name: str,
+    command: list[str],
+    log_path: Path,
+    progress_file: Path | None = None,
+) -> int:
+    """Run an external tool, log its output, and print a heartbeat while it works.
+
+    When progress_file is provided, report how many newline-delimited records
+    have been appended since the previous heartbeat. This is useful for quiet
+    tools such as httpx that otherwise appear to hang when output is redirected.
+    """
+    print(f"\n[+] {name}\n    $ {' '.join(command)}", flush=True)
+    started = time.monotonic()
+    progress_offset = 0
+    progress_records = 0
     try:
         with log_path.open("w", encoding="utf-8", errors="replace") as log:
             log.write("COMMAND: " + " ".join(command) + "\n\n")
-            result = subprocess.run(
-                command, stdout=log, stderr=subprocess.STDOUT, text=True, check=False
+            process = subprocess.Popen(
+                command, stdout=log, stderr=subprocess.STDOUT, text=True
             )
+            try:
+                while True:
+                    try:
+                        return_code = process.wait(timeout=10)
+                        break
+                    except subprocess.TimeoutExpired:
+                        elapsed = int(time.monotonic() - started)
+                        progress_note = ""
+                        if progress_file is not None:
+                            try:
+                                with progress_file.open("rb") as stream:
+                                    stream.seek(progress_offset)
+                                    chunk = stream.read()
+                                progress_offset += len(chunk)
+                                progress_records += chunk.count(b"\\n")
+                            except OSError:
+                                # httpx may not create its output file until its first result.
+                                pass
+                            progress_note = (
+                                f"; {progress_records} HTTP result record(s) saved"
+                            )
+                        print(
+                            f"[+] {name} still running ({elapsed}s elapsed"
+                            f"{progress_note}); log: {log_path}",
+                            flush=True,
+                        )
+            except KeyboardInterrupt:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                raise
     except OSError as exc:
         log_path.write_text(f"Could not execute command: {exc}\n", encoding="utf-8")
         print(f"[ERROR] Could not execute {command[0]}: {exc}")
         return 127
 
-    if result.returncode == 0:
-        print(f"[OK] {name} completed; log: {log_path}")
+    elapsed = int(time.monotonic() - started)
+    if return_code == 0:
+        print(f"[OK] {name} completed in {elapsed}s; log: {log_path}")
     else:
-        print(f"[!] {name} returned {result.returncode}; inspect {log_path}")
-    return result.returncode
+        print(f"[!] {name} returned {return_code}; inspect {log_path}")
+    return return_code
 
 
 def save_report(out_dir: Path, status: dict) -> None:
@@ -1035,9 +1083,12 @@ def main() -> int:
     ]
     if args.bruteforce_direct:
         httpx_command.extend(["-rate-limit", str(args.bruteforce_rate)])
+    print(f"[+] httpx targets queued: {len(combined)}", flush=True)
     rc = run_step(
         "httpx: identify live services and fingerprint technologies",
-        httpx_command, out_dir / "httpx.log",
+        httpx_command,
+        out_dir / "httpx.log",
+        progress_file=details_file,
     )
     status["stages"]["httpx"] = rc
     if rc:
