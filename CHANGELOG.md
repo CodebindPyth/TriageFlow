@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.5 — 2026-10-11
+
+### Added
+- Added `--bruteforce-direct` to the main `triageflow.py` pipeline: wordlist-generated host candidates are fed directly to httpx, bypassing the separate dnsx and Subfinder stages.
+- Added `--bruteforce-rate` (default 50 requests/second) and saved generated candidates plus live HTTP candidate matches in `wordlist-candidates.txt` and `wordlist-live.txt`.
+- Normalize a leading `www.` when deriving a root for subdomain wordlist generation.
+- Added the standalone `vhost_direct.py` helper for direct Host-header discovery in authorized labs.
+
 ## Unreleased
 
 ### Added
