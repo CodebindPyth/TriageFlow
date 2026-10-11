@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.7"
+VERSION = "2.0.8"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -717,7 +717,7 @@ def main() -> int:
     parser.add_argument("-w", "--wordlist", help="Custom subdomain wordlist, one entry per line")
     parser.add_argument(
         "--bruteforce-direct", action="store_true",
-        help="Send generated wordlist hostnames straight to httpx; skip dnsx and Subfinder",
+        help="Send wordlist hostnames straight to httpx, bypassing dnsx pre-resolution; Subfinder still runs unless --no-subdomains is set",
     )
     parser.add_argument(
         "--bruteforce-rate", type=int, default=50,
@@ -864,7 +864,7 @@ def main() -> int:
         required.append("nuclei")
     if not args.no_screenshots:
         required.append("gowitness")
-    if not args.no_subdomains and roots and not args.bruteforce_direct:
+    if not args.no_subdomains and roots:
         required.append("subfinder")
     if wordlist and roots and not args.bruteforce_direct:
         required.append("dnsx")
@@ -972,15 +972,8 @@ def main() -> int:
             status["stages"]["wordlist_dns"] = {"status": "failed", "error": str(exc)}
             pipeline_failures.append("wordlist DNS")
 
-    # Passive discovery is complementary; it must not discard successfully
-    # resolved wordlist targets if Subfinder errors or returns partial output.
-    if args.bruteforce_direct:
-        status["stages"]["subfinder"] = {
-            "status": "skipped",
-            "reason": "--bruteforce-direct skips passive subdomain discovery",
-        }
-
-    if not args.no_subdomains and roots and not args.bruteforce_direct:
+    # Passive discovery remains enabled in direct wordlist mode unless explicitly disabled.
+    if not args.no_subdomains and roots:
         roots_file, sub_file = out_dir / "root-domains.txt", out_dir / "subdomains.txt"
         write_lines(roots_file, roots)
         cmd = ["subfinder", "-dL", str(roots_file), "-silent", "-o", str(sub_file)]
@@ -1121,11 +1114,11 @@ def main() -> int:
     status["asset_count"] = len(assets)
     status["software_fingerprint_count"] = len(fingerprints)
     if not live:
-        print("[!] No live web URLs found or httpx JSON output could not be parsed; downstream stages skipped.")
-        status["stages"]["login_panels"] = "skipped: no live URLs"
-        status["stages"]["cve_lookup"] = "skipped: no live URLs"
-        status["stages"]["nuclei"] = "skipped: no live URLs"
-        status["stages"]["gowitness"] = "skipped: no live URLs"
+        print("[!] No live web URLs were returned by httpx; downstream stages were not run because there is nothing to inspect.")
+        status["stages"]["login_panels"] = "not run: httpx returned no live URLs"
+        status["stages"]["cve_lookup"] = "not run: httpx returned no live URLs"
+        status["stages"]["nuclei"] = "not run: httpx returned no live URLs"
+        status["stages"]["gowitness"] = "not run: httpx returned no live URLs"
         save_report(out_dir, status)
         return 1 if pipeline_failures else 0
 
