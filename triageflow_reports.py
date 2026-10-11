@@ -350,17 +350,18 @@ footer{padding:2rem;color:#9caec4;text-align:center}
         _table("Pipeline stages", [("stage", "Stage"), ("result", "Result")],
                stage_rows, "No stage metadata recorded."),
     ]
+    report_version = html.escape(str(status.get("version") or "unknown"))
     content = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TriageFlow v2.0.1 Security Recon Report</title><style>{style}</style></head>
-<body><header><h1>TriageFlow v2.0.1 — Recon Report</h1>
+<title>TriageFlow v{report_version} Security Recon Report</title><style>{style}</style></head>
+<body><header><h1>TriageFlow v{report_version} — Recon Report</h1>
 <div class="subtitle">Generated at {_cell(status.get('finished_utc', 'unknown'))} · Output folder: {_cell(output_dir.name)}</div>
 <div class="notice"><strong>Interpretation note:</strong> CVE matches and technology fingerprints are investigation leads, not confirmed vulnerabilities.
 Login-panel discovery is GET-only. Virtual-host findings are based on HTTP Host-header responses and may not have DNS records.
 No default credentials were submitted or tested. Screenshots are captured only when enabled.</div></header>
 <main><div class="cards">{cards}</div>
 {"".join(sections)}
-</main><footer>TriageFlow v2 · Authorized assessment only · Keep reports, logs and screenshots private when they contain sensitive data.</footer></body></html>
+</main><footer>TriageFlow v{report_version} · Authorized assessment only · Keep reports, logs and screenshots private when they contain sensitive data.</footer></body></html>
 """
     path = output_dir / "report.html"
     path.write_text(content, encoding="utf-8")
