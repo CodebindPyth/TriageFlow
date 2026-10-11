@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.3 — 2026-10-11
+
+### Changed
+- Direct CLI runs now use the bundled starter wordlist by default unless `--no-wordlist` is supplied; the guided wizard keeps its explicit wordlist choice.
+- Wordlist DNS discovery now runs before passive Subfinder discovery, and resolved wordlist results are prioritized in the combined target file.
+- Subfinder failures no longer discard successful wordlist discoveries; the pipeline continues with available direct and resolved targets and reports the failed stage.
+
+### Fixed
+- DNS wordlist errors no longer prevent the passive/direct-target stages from continuing.
+- The no-live-target path records Nuclei and GoWitness as skipped instead of leaving the stages absent.
+- HTML reports now display the actual run version rather than a hard-coded v2.0.1 string.
+- Added tests for bundled wordlist availability, target order, and dynamic report versions.
+
 ## 2.0.2 — 2026-10-11
 
 ### Fixed
