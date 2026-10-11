@@ -242,7 +242,7 @@ def generate_html_report(output_dir: Path, status: dict) -> Path:
                 "severity": cve.get("severity", ""),
                 "cvss_score": cve.get("cvss_score", ""),
                 "description": cve.get("description", ""),
-                "match_method": product.get("match_method", ""),
+                "match_method": cve.get("match_confidence", product.get("match_method", "")),
             })
     nuclei = _load_jsonl(output_dir / "nuclei-findings.jsonl")
     nuclei_rows = []
