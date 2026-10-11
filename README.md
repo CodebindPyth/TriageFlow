@@ -1,6 +1,6 @@
 # TriageFlow
 
-**TriageFlow** is a Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness** into one repeatable pipeline and stores results in a timestamped directory.
+**TriageFlow** is a Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
 > **Authorization only:** Run this tool only against systems you own or targets explicitly included in your written authorization, lab, or bug-bounty scope. The confirmation prompt is an operational reminder, not a substitute for permission.
 
@@ -12,9 +12,11 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 2. Normalize and deduplicate supplied entries, then identify DNS root domains suitable for subdomain discovery.
 3. Optionally run Subfinder and/or build candidate subdomains from a custom wordlist (`-w`).
 4. Combine direct targets, root domains, and discovered names into one deduplicated list.
-5. Run httpx to find responding HTTP/HTTPS services.
-6. Feed the **same live URL list** to Nuclei and GoWitness.
-7. Save command logs, findings, screenshots, and machine-readable and human-readable summaries.
+5. Run httpx with JSON output, technology detection, server headers, titles, and status codes.
+6. Build a software/version inventory and query the NIST NVD API for a bounded number of versioned product candidates.
+7. Check a bounded number of live origins for likely login panels using GET requests only; no credentials are submitted.
+8. Feed the **same live URL list** to Nuclei and GoWitness.
+9. Save command logs, findings, screenshots, inventory, CVE candidates, login panels, and summaries.
 
 ## Tools and their roles
 
@@ -22,7 +24,10 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 |---|---|---|
 | **Subfinder** | Passive subdomain enumeration for supplied root domains. `--subfinder-all` asks it to use all configured sources; this may be slower and some sources may need API keys. | `subdomains.txt` |
 | **Custom wordlist (`-w`)** | Combines each wordlist entry with each root domain, checks whether the candidate resolves using the system DNS resolver, and adds resolving names to the target set. Full hostnames already ending in a root domain are also accepted. | `wordlist-candidates.txt`, `wordlist-resolved.txt` |
-| **httpx (ProjectDiscovery)** | Probes the combined targets to identify reachable web services. This is the ProjectDiscovery CLI tool, not the unrelated Python HTTPX library. | `live.txt` |
+| **httpx (ProjectDiscovery)** | Probes targets and records response status, title, server header, and detected technologies as JSONL. This is the ProjectDiscovery CLI tool, not the unrelated Python HTTPX library. | `live.txt`, `httpx-details.jsonl` |
+| **Software inventory** | Extracts product/version observations visible to httpx. | `software-inventory.csv` |
+| **NVD CVE lookup** | Searches NIST NVD API 2.0 for a limited number of versioned product candidates. Results are keyword matches that require validation against the affected-version range. | `cve-candidates.json`, `cve-candidates.md` |
+| **Login-panel discovery** | Sends bounded HTTP GET requests to common login paths and records likely panels. It never attempts to authenticate or submit credentials. | `login-panels.csv` |
 | **Nuclei** | Runs template-based checks against each URL in `live.txt`, filtered by the configured severities. Findings are written as JSON Lines for later review. | `nuclei-findings.jsonl` |
 | **GoWitness** | Captures screenshots from the exact same `live.txt` list, making it easier to visually review web applications. Artifact layout can vary by GoWitness version. | `gowitness/` and `gowitness.log` |
 
@@ -57,6 +62,13 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 ```
 
 Subfinder and the custom wordlist are complementary. If discovery is disabled with `--no-subdomains`, the wordlist can still be used; Subfinder will be skipped. Wordlist DNS resolution is a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
+
+## Enrichment features
+
+- **Version fingerprinting:** httpx runs with technology detection and records server/title/status metadata. Product/version strings that are exposed by the target are written to `software-inventory.csv`; many services intentionally hide or suppress precise versions, so an empty version is normal.
+- **Known-CVE candidates:** versioned products are searched through the official [NIST NVD API](https://nvd.nist.gov/developers/vulnerabilities). By default the tool queries at most five distinct product/version pairs to limit latency and API usage. Set the `NVD_API_KEY` environment variable to use an NVD API key. Review `cve-candidates.md` and `cve-candidates.json`: keyword results are leads, not proof of impact, and affected-version ranges must be checked manually.
+- **Login-panel discovery:** TriageFlow makes GET-only requests to a small set of common paths on up to 50 distinct live origins by default, then writes `login-panels.csv`. It does not submit usernames/passwords, follow redirects to other hosts, or attempt authentication. Use this inventory to plan an explicitly authorized manual configuration audit.
+- **Community contributions:** see `CONTRIBUTING.md` for the fork-and-pull-request workflow.
 
 ## Installation
 
@@ -121,6 +133,10 @@ python3 triageflow.py -u example.com --no-nuclei --no-screenshots
 | `--timeout` | httpx timeout in seconds; default is `10`. |
 | `--no-nuclei` | Skip the Nuclei stage. |
 | `--no-screenshots` | Skip the GoWitness stage. |
+| `--no-login-check` | Skip login-panel discovery. |
+| `--max-login-hosts` | Maximum number of distinct origins checked for login panels; default `50`. |
+| `--no-cve-lookup` | Skip NVD CVE candidate lookups. |
+| `--max-cve-products` | Maximum versioned product/version pairs queried in NVD; default `5`. |
 
 Before scanning, the program asks you to type `YES` to confirm the targets are yours or explicitly in scope. Any other answer cancels execution.
 
@@ -136,6 +152,11 @@ triageflow-results/20261011-173000/
 ├── wordlist-resolved.txt     # wordlist candidates resolving via system DNS
 ├── all-targets.txt           # deduplicated inputs for httpx
 ├── live.txt                  # web URLs reported by httpx
+├── httpx-details.jsonl       # httpx JSONL fingerprint details
+├── software-inventory.csv   # observed software/product versions
+├── login-panels.csv          # likely login endpoints; GET-only checks
+├── cve-candidates.json       # NVD keyword lookup results
+├── cve-candidates.md         # readable CVE candidate report
 ├── nuclei-findings.jsonl     # Nuclei findings (if enabled)
 ├── gowitness/                # screenshots/database artifacts (if enabled)
 ├── subfinder.log             # Subfinder output/diagnostics, if enabled
@@ -152,8 +173,9 @@ Some files are omitted when their stage is not used. Tool-specific artifact name
 
 - **Shared input:** Nuclei and GoWitness both consume `live.txt`; therefore discovered hosts are included in both stages if httpx reports them live.
 - **DNS wordlist filtering:** the script uses the operating system's DNS resolver through Python's `socket.getaddrinfo`. It does not perform brute-force DNS against arbitrary resolvers, and a failed lookup can reflect local DNS/network conditions.
-- **Findings are not verdicts:** Nuclei results can be false positives or require manual verification. A finding is not automatically proof of exploitability.
-- **Tool compatibility:** command-line flags can vary between tool versions. If a stage fails, inspect its corresponding log and compare the command with that installed version's help output.
+- **Findings are not verdicts:** Nuclei results and NVD keyword matches can be false positives or require manual verification. An observed version does not prove a product is vulnerable.
+- **Tool compatibility:** command-line flags and JSON keys can vary between tool versions. If a stage fails, inspect its corresponding log and compare the command with that installed version's help output.
+- **NVD rate limits:** unauthenticated NVD requests are throttled deliberately. The tool limits the number of queried product/version pairs; consider setting `NVD_API_KEY` for larger inventories.
 - **No guarantee of full coverage:** passive discovery sources, DNS behavior, timeouts, rate limits, and scope all affect results.
 - **Sensitive output:** screenshots and logs may contain tokens, internal hostnames, or personal data. Protect them and do not commit scan results to a public repository.
 - **Safe use:** respect written scope, rate limits, and rules of engagement. Do not scan systems without authorization.
