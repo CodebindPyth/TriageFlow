@@ -1,6 +1,7 @@
 """Reporting helpers for TriageFlow v2.
 
-Reports are local, self-contained and use only Python's standard library.
+Report tables use local data and Python's standard library; screenshot previews use
+relative image files from the sibling gowitness/ directory when available.
 No function in this module attempts authentication or submits credentials.
 """
 from __future__ import annotations
@@ -241,7 +242,7 @@ def _table(title: str, columns: list[tuple[str, str]], rows: list[dict], empty: 
 
 
 def generate_html_report(output_dir: Path, status: dict) -> Path:
-    """Generate a single-file HTML report with local results only and escaped table cells."""
+    """Generate the HTML report with escaped table cells and a local screenshot gallery."""
     assets = read_csv_rows(output_dir / "asset-inventory.csv")
     software = read_csv_rows(output_dir / "software-inventory.csv")
     panels = read_csv_rows(output_dir / "login-panels.csv")
