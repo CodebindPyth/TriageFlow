@@ -14,6 +14,7 @@ def make_args():
         no_subdomains=False,
         no_nuclei=False,
         no_screenshots=False,
+        no_html_report=False,
     )
 
 
@@ -22,9 +23,9 @@ class WizardTests(unittest.TestCase):
         with patch("builtins.input", return_value=""):
             self.assertEqual(prompt_choice("Profile", {"1": "Standard", "2": "Quick"}, "1"), "1")
 
-    def test_standard_wizard_uses_bundled_wordlist(self):
+    def test_standard_wizard_uses_bundled_wordlist_and_optional_outputs(self):
         args = make_args()
-        with patch("builtins.input", side_effect=["1", "example.com", "1", "1"]):
+        with patch("builtins.input", side_effect=["1", "example.com", "1", "1", "", ""]):
             with patch("builtins.print"):
                 self.assertTrue(interactive_setup(args))
         self.assertEqual(args.single_target, "example.com")
@@ -33,10 +34,11 @@ class WizardTests(unittest.TestCase):
         self.assertFalse(args.no_subdomains)
         self.assertFalse(args.no_nuclei)
         self.assertFalse(args.no_screenshots)
+        self.assertFalse(args.no_html_report)
 
-    def test_quick_wizard_disables_heavy_stages(self):
+    def test_quick_profile_can_skip_screenshots(self):
         args = make_args()
-        with patch("builtins.input", side_effect=["1", "example.com", "3", "2"]):
+        with patch("builtins.input", side_effect=["1", "example.com", "3", "2", "", ""]):
             with patch("builtins.print"):
                 self.assertTrue(interactive_setup(args))
         self.assertEqual(args.single_target, "example.com")
@@ -44,6 +46,15 @@ class WizardTests(unittest.TestCase):
         self.assertTrue(args.no_subdomains)
         self.assertTrue(args.no_nuclei)
         self.assertTrue(args.no_screenshots)
+        self.assertFalse(args.no_html_report)
+
+    def test_quick_profile_can_still_enable_screenshots(self):
+        args = make_args()
+        with patch("builtins.input", side_effect=["1", "example.com", "3", "2", "1", "1"]):
+            with patch("builtins.print"):
+                self.assertTrue(interactive_setup(args))
+        self.assertFalse(args.no_screenshots)
+        self.assertFalse(args.no_html_report)
 
     def test_quit_cancels_wizard(self):
         args = make_args()
