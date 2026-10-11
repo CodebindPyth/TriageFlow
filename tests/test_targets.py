@@ -1,6 +1,6 @@
 import unittest
 
-from triageflow import hostname_of, is_ip
+from triageflow import hostname_of, is_ip, parse_dns_resolvers
 
 
 class TargetParsingTests(unittest.TestCase):
@@ -21,6 +21,16 @@ class TargetParsingTests(unittest.TestCase):
 
     def test_hostname_with_port_drops_port_for_scope_checks(self):
         self.assertEqual(hostname_of("app.example.test:8443"), "app.example.test")
+
+    def test_dns_resolvers_skip_link_local_scoped_ipv6(self):
+        resolvers = parse_dns_resolvers(
+            "nameserver 172.20.10.1\\n"
+            "nameserver fe80::8820:dff:fe52:5d64%eth1\\n"
+            "nameserver fe80::1\\n"
+            "nameserver 2001:4860:4860::8888\\n"
+            "nameserver 172.20.10.1\\n"
+        )
+        self.assertEqual(resolvers, ["172.20.10.1", "2001:4860:4860::8888"])
 
 
 if __name__ == "__main__":
