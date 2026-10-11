@@ -56,6 +56,23 @@ class V2ReportTests(unittest.TestCase):
                 "status_code": 200,
             }], out / "asset-inventory.csv")
             write_default_credentials_review([], [], out)
+            with (out / "vhost-findings.csv").open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=[
+                    "virtual_host", "root_domain", "base_url", "status_code",
+                    "content_length", "words", "lines", "content_type", "redirect_location",
+                ])
+                writer.writeheader()
+                writer.writerow({
+                    "virtual_host": "portal.example.test",
+                    "root_domain": "example.test",
+                    "base_url": "http://example.test/",
+                    "status_code": "200",
+                    "content_length": "1234",
+                    "words": "200",
+                    "lines": "30",
+                    "content_type": "text/html",
+                    "redirect_location": "",
+                })
             report = generate_html_report(out, {
                 "version": "2.0.0",
                 "finished_utc": "2026-10-11T00:00:00Z",
@@ -69,6 +86,8 @@ class V2ReportTests(unittest.TestCase):
             })
             text = report.read_text(encoding="utf-8")
             self.assertIn("TriageFlow v2", text)
+            self.assertIn("HTTP virtual hosts", text)
+            self.assertIn("portal.example.test", text)
             self.assertNotIn("<script>alert", text)
             self.assertIn("&lt;script&gt;", text)
 
