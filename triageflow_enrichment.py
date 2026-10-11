@@ -150,8 +150,8 @@ def _version_tokens(value: str) -> tuple:
     )
 
 
-def _compare_versions(left: str, right: str) -> int:
-    """Return -1, 0, or 1; this is a heuristic, not a universal vendor version parser."""
+def _compare_versions(left: str, right: str) -> int | None:
+    """Compare common numeric versions; return None for ambiguous vendor schemes."""
     a, b = list(_version_tokens(left)), list(_version_tokens(right))
     length = max(len(a), len(b))
     a.extend([(0, 0)] * (length - len(a)))
@@ -159,9 +159,9 @@ def _compare_versions(left: str, right: str) -> int:
     for first, second in zip(a, b):
         if first == second:
             continue
-        # A numeric segment and text segment cannot be safely ranked across every scheme.
+        # Mixed numeric/text component comparisons can be vendor-specific.
         if first[0] != second[0]:
-            return 0
+            return None
         return -1 if first[1] < second[1] else 1
     return 0
 
@@ -204,6 +204,8 @@ def _classify_cve_match(cve: dict, product: str, version: str) -> tuple[str, lis
     positive = []
     criteria_seen = []
     for match in _iter_cpe_matches(cve.get("configurations", [])):
+        if match.get("vulnerable") is False:
+            continue
         criteria = str(match.get("criteria") or match.get("cpe23Uri") or "")
         if not criteria or not _cpe_product_matches(criteria, product):
             continue
@@ -226,29 +228,42 @@ def _classify_cve_match(cve: dict, product: str, version: str) -> tuple[str, lis
         known = False
         if start_in:
             cmp = _compare_versions(version, start_in)
-            if cmp == 0 and version.casefold() != start_in.casefold():
+            if cmp is None:
                 known = False
                 inside = False
             elif cmp < 0:
                 inside = False
+                known = True
             else:
                 known = True
         if start_ex:
             cmp = _compare_versions(version, start_ex)
-            if cmp <= 0:
+            if cmp is None:
+                known = False
                 inside = False
+            elif cmp <= 0:
+                inside = False
+                known = True
             else:
                 known = True
         if end_in:
             cmp = _compare_versions(version, end_in)
-            if cmp > 0:
+            if cmp is None:
+                known = False
                 inside = False
+            elif cmp > 0:
+                inside = False
+                known = True
             else:
                 known = True
         if end_ex:
             cmp = _compare_versions(version, end_ex)
-            if cmp >= 0:
+            if cmp is None:
+                known = False
                 inside = False
+            elif cmp >= 0:
+                inside = False
+                known = True
             else:
                 known = True
         if inside and known:
