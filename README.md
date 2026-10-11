@@ -46,16 +46,17 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
           v
   Root domains + direct targets
           |
-     +----+----------------+
-     |                     |
-     v                     v
-  Subfinder          Custom wordlist (-w)
-     |              candidate DNS resolution
-     +----------+----------+
-                v
-     Deduplicate target list
-                |
-                v
+          v
+  Custom wordlist DNS (dnsx)
+  SecLists if installed, else bundled
+          |
+          v
+  Passive Subfinder (unless skipped)
+          |
+          v
+  Deduplicate: direct + roots + wordlist + passive
+          |
+          v
               httpx
                 |
        live URLs + JSONL
@@ -76,7 +77,7 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
           Logs + summary
 ```
 
-Subfinder and the wordlist are complementary. In direct CLI mode, the program first looks for a local SecLists DNS wordlist and falls back to the bundled starter list; the wizard lets you choose whether to use the detected list. `--no-subdomains` skips Subfinder but still uses the wordlist, while `--no-wordlist` skips the bundled default. DNS resolution is only a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
+Subfinder and the wordlist are complementary. In direct CLI mode, the program first looks for a local SecLists DNS wordlist and falls back to the bundled starter list; the wizard lets you choose whether to use the detected list. `--no-subdomains` skips Subfinder but still uses the wordlist, while `--no-wordlist` disables automatic wordlist selection. DNS resolution is only a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
 
 ## What is new in v2?
 
