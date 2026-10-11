@@ -219,7 +219,7 @@ def _table(title: str, columns: list[tuple[str, str]], rows: list[dict], empty: 
             cells = []
             for key, _label in columns:
                 value = row.get(key, "")
-                if key == "url" or key == "login_url":
+                if key in ("url", "login_url", "security_reference"):
                     href = _as_text(value)
                     if href.startswith(("http://", "https://")):
                         cells.append(f'<td><a href="{_cell(href)}" rel="noreferrer">{_cell(href)}</a></td>')
