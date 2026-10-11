@@ -1,4 +1,4 @@
-# TriageFlow v2.0.1
+# TriageFlow v2.0.2
 
 **TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
@@ -110,7 +110,7 @@ Subfinder and the custom wordlist are complementary. If discovery is disabled wi
 - `ffuf` when you enable virtual-host discovery or accept its fallback prompt
 - Network/DNS access appropriate to your authorized environment
 
-TriageFlow checks for required executables. When a tool is missing, it attempts `go install` into `~/go/bin` if Go is available, and reports tools that remain unavailable. If screenshots are enabled but Chrome/Chromium cannot be found on `PATH`, it prints a warning before the scan starts. Ensure `~/go/bin` is on `PATH` for later terminal sessions. Automatic installation can fail because of network restrictions, Go-version incompatibilities, or OS package-manager problems; inspect the messages and logs rather than assuming installation succeeded.
+TriageFlow checks for required executables in `PATH`, `~/go/bin`, and the directories reported by `go env GOBIN`/`GOPATH`. It skips installation when a tool already exists in one of those locations, and attempts `go install` only for tools that are genuinely missing. This avoids repeated downloads when Go uses a custom binary directory. Tools that remain unavailable are reported before the scan starts. If screenshots are enabled but Chrome/Chromium cannot be found on `PATH`, it prints a warning before the scan starts. Ensure `~/go/bin` is on `PATH` for later terminal sessions. Automatic installation can fail because of network restrictions, Go-version incompatibilities, or OS package-manager problems; inspect the messages and logs rather than assuming installation succeeded.
 
 ### Clone and start (recommended for beginners)
 
