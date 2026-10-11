@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -42,12 +42,42 @@ GO_INSTALLS = {
 }
 
 
+def add_go_bin_paths(go: str) -> None:
+    """Expose the Go tool binary directories, including custom GOBIN/GOPATH values."""
+    candidates = [GO_BIN]
+    try:
+        result = subprocess.run(
+            [go, "env", "GOBIN", "GOPATH"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            values = result.stdout.splitlines()
+            gobin = values[0].strip() if values else ""
+            gopath = values[1].strip() if len(values) > 1 else ""
+            if gobin:
+                candidates.append(Path(gobin).expanduser())
+            for entry in gopath.split(os.pathsep):
+                if entry.strip():
+                    candidates.append(Path(entry.strip()).expanduser() / "bin")
+    except (OSError, subprocess.SubprocessError):
+        # The default ~/go/bin path remains available even if "go env" fails.
+        pass
+
+    existing_path = os.environ.get("PATH", "").split(os.pathsep)
+    entries = [str(path) for path in candidates if str(path)]
+    os.environ["PATH"] = os.pathsep.join(dict.fromkeys(entries + existing_path))
+
+
 def ensure_tools(required: list[str]) -> list[str]:
-    """Locate required binaries and try installing missing Go tools."""
+    """Find required binaries first; install only tools that are genuinely missing."""
     GO_BIN.mkdir(parents=True, exist_ok=True)
     os.environ["PATH"] = str(GO_BIN) + os.pathsep + os.environ.get("PATH", "")
     missing = [name for name in required if shutil.which(name) is None]
     if not missing:
+        print("[OK] Required tools are already available; skipping downloads.")
         return []
 
     go = shutil.which("go")
@@ -56,11 +86,19 @@ def ensure_tools(required: list[str]) -> list[str]:
         print("[ERROR] Go is unavailable; install Go and retry.")
         return missing
 
+    # Go can install binaries outside ~/go/bin when GOBIN or GOPATH is customized.
+    # Search those locations before deciding that a download/install is necessary.
+    add_go_bin_paths(go)
+    missing = [name for name in required if shutil.which(name) is None]
+    if not missing:
+        print("[OK] Required tools were found in configured Go bin directories; skipping downloads.")
+        return []
+
     for name in missing:
         install_path = GO_INSTALLS.get(name)
         if not install_path:
             continue
-        print(f"[+] Attempting to install {name} with Go...")
+        print(f"[+] Installing missing tool {name} with Go...")
         result = subprocess.run([go, "install", install_path], check=False)
         if result.returncode:
             print(f"[ERROR] Installation failed for {name}; try: go install {install_path}")
