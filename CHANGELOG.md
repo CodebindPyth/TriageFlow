@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.1 — 2026-10-11
+
+### Fixed
+- Replaced thousands of serial DNS lookups with parallel dnsx resolution, bounded timeouts, wildcard filtering, and periodic progress messages.
+- Ctrl+C during wordlist DNS checks now stops cleanly and saves the partial status/report where possible.
+- Private lab DNS resolvers can be supplied from `/etc/resolv.conf` or with `--dns-resolvers`.
+
+### Added
+- If both DNS and Subfinder find no subdomains, ask before running ffuf HTTP virtual-host discovery with the same wordlist. The `--vhost-fuzz` flag enables the check explicitly.
+- Virtual-host findings are stored in CSV, JSON and text files and displayed in the HTML report.
+- Unit tests for target scoping and virtual-host outputs.
+
 ## 2.0.0 — 2026-10-11
 
 ### Added
