@@ -21,6 +21,10 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 9. Optionally capture screenshots for **all live URLs**, including discovered live subdomains, with GoWitness.
 10. Generate a self-contained HTML report plus CSV, JSON and Markdown outputs.
 
+## Default behavior
+
+A normal run enables passive Subfinder discovery (unless `--no-subdomains` is supplied), HTTP service fingerprinting, login-panel discovery, NVD CVE candidate lookup, Nuclei checks, GoWitness screenshots and the HTML report. Use the matching `--no-*` switch when you intentionally want a stage disabled. The guided wizard's Quick profile is also an explicit choice to omit selected stages. Login discovery uses bounded same-origin GET requests only; it follows login-like links found in returned HTML and checks common authentication paths, but JavaScript-only or custom unlinked pages can still be missed. It never submits usernames/passwords or tests default credentials.
+
 ## Tools and their roles
 
 | Tool | Purpose in this workflow | Output/use |
@@ -54,18 +58,17 @@ Use a wordlist of single labels (for example, admin, dev, portal). The base URL 
 
 ## Direct wordlist brute-force in the main TriageFlow pipeline
 
-Use `--bruteforce-direct` when you want the **normal `triageflow.py` pipeline** to queue wordlist-generated hostname candidates directly for `httpx`, without the separate `dnsx` pre-resolution stage and without Subfinder. `httpx` still has to resolve hostnames internally to connect to web services, so this does not mean DNS is never used; it means there is no standalone `dnsx` pass before HTTP probing.
+Use `--bruteforce-direct` when you want the **normal `triageflow.py` pipeline** to queue wordlist-generated hostname candidates directly for `httpx`, without the separate `dnsx` pre-resolution stage. Subfinder remains enabled unless you explicitly pass `--no-subdomains`. `httpx` still has to resolve hostnames internally to connect to web services, so this bypasses only the standalone `dnsx` pass, not the DNS resolution needed for HTTP connections.
 
 ```bash
 python3 triageflow.py \
   -u http://inlanefreight.local/ \
   -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt \
   --bruteforce-direct \
-  --bruteforce-rate 50 \
-  --no-nuclei --no-screenshots
+  --bruteforce-rate 10
 ```
 
-The direct mode skips Subfinder and `dnsx`, feeds the generated candidates to `httpx`, and keeps the normal inventory/report stages for responsive URLs. The request-rate limit defaults to 50 requests per second and can be adjusted with `--bruteforce-rate`. Candidate names are recorded in `wordlist-candidates.txt`; candidates that produced live HTTP results are listed in `wordlist-live.txt`. Use this only on systems explicitly in scope for your assessment.
+The direct mode skips the standalone `dnsx` pre-resolution stage, feeds generated candidates to `httpx`, and still runs Subfinder unless `--no-subdomains` is supplied. By default, login-panel discovery, NVD CVE lookup, Nuclei and GoWitness screenshots are enabled. Each can be deliberately disabled with its corresponding `--no-login-check`, `--no-cve-lookup`, `--no-nuclei` or `--no-screenshots` option. The request-rate limit defaults to 50 requests per second and can be adjusted with `--bruteforce-rate`. Candidate names are recorded in `wordlist-candidates.txt`; candidates that produced live HTTP results are listed in `wordlist-live.txt`. The HTML report displays screenshot images from its sibling `gowitness/` folder, and the report must stay with that folder. Use this only on systems explicitly in scope for your assessment.
 
 Long-running stages now print a heartbeat every 10 seconds. During `httpx`, TriageFlow also reports how many JSONL result records have been saved so far. This is progress feedback, not a count of every attempted request: names that do not respond will not add a result record. A very large candidate list can still take a long time; for example, 100,000 candidates at 50 requests/second has a theoretical rate-limit floor of about 33 minutes, before DNS and connection delays.
 
