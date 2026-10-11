@@ -651,7 +651,7 @@ def main() -> int:
     parser.add_argument(
         "--no-wordlist",
         action="store_true",
-        help="Skip the bundled default wordlist when -w is not provided",
+        help="Skip automatic default wordlist detection when -w is not provided",
     )
     parser.add_argument("-o", "--output", default="triageflow-results", help="Output base directory")
     parser.add_argument("--severity", default="medium,high,critical", help="Nuclei severities")
