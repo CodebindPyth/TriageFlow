@@ -1,4 +1,4 @@
-# TriageFlow v2.0.6
+# TriageFlow v2.0.7
 
 **TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
@@ -66,6 +66,8 @@ python3 triageflow.py \
 ```
 
 The direct mode skips Subfinder and `dnsx`, feeds the generated candidates to `httpx`, and keeps the normal inventory/report stages for responsive URLs. The request-rate limit defaults to 50 requests per second and can be adjusted with `--bruteforce-rate`. Candidate names are recorded in `wordlist-candidates.txt`; candidates that produced live HTTP results are listed in `wordlist-live.txt`. Use this only on systems explicitly in scope for your assessment.
+
+Long-running stages now print a heartbeat every 10 seconds. During `httpx`, TriageFlow also reports how many JSONL result records have been saved so far. This is progress feedback, not a count of every attempted request: names that do not respond will not add a result record. A very large candidate list can still take a long time; for example, 100,000 candidates at 50 requests/second has a theoretical rate-limit floor of about 33 minutes, before DNS and connection delays.
 
 ### Pipeline overview
 
