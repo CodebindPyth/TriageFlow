@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.4 — 2026-10-11
+
+### Fixed
+- Ignore interface-scoped and link-local IPv6 nameservers read from `/etc/resolv.conf` when constructing dnsx's comma-separated resolver list.
+- Log the selected wordlist path and count of non-empty input entries before resolving, making unexpectedly large candidate counts diagnosable.
+- Added tests for scoped/link-local resolver filtering.
+
 ## 2.0.3 — 2026-10-11
 
 ### Changed
