@@ -93,6 +93,28 @@ class V2ReportTests(unittest.TestCase):
             self.assertNotIn("<script>alert", text)
             self.assertIn("&lt;script&gt;", text)
 
+    def test_html_report_displays_gowitness_screenshots_from_local_folder(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp)
+            shot_dir = out / "gowitness"
+            shot_dir.mkdir()
+            (shot_dir / "https_example_test.png").write_bytes(b"fake image bytes")
+            report = generate_html_report(out, {
+                "version": "2.0.8",
+                "finished_utc": "2026-10-11T00:00:00Z",
+                "target_count": 1,
+                "live_url_count": 1,
+                "subdomain_count": 0,
+                "software_fingerprint_count": 0,
+                "login_panel_count": 0,
+                "cve_candidate_count": 0,
+                "stages": {"gowitness": 0},
+            })
+            text = report.read_text(encoding="utf-8")
+            self.assertIn("<h2>Screenshots</h2>", text)
+            self.assertIn('src="gowitness/https_example_test.png"', text)
+            self.assertIn("1 screenshot image(s) found", text)
+
 
 if __name__ == "__main__":
     unittest.main()
