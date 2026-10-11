@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import ipaddress
 import json
 import re
@@ -36,6 +37,7 @@ GO_INSTALLS = {
     "nuclei": "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
     "subfinder": "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
     "dnsx": "github.com/projectdiscovery/dnsx/cmd/dnsx@latest",
+    "ffuf": "github.com/ffuf/ffuf/v2@latest",
     "gowitness": "github.com/sensepost/gowitness@latest",
 }
 
@@ -244,6 +246,137 @@ def discover_wordlist(
 
 
 
+
+def base_url_for_root(root: str, targets: list[str]) -> str:
+    """Pick the supplied HTTP URL for a root, or use plain HTTP as a fallback."""
+    for target in targets:
+        if hostname_of(target) != root:
+            continue
+        if "://" in target:
+            parsed = urlparse(target)
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}/"
+    return f"http://{root}/"
+
+
+def discover_vhosts(
+    base_url: str,
+    root_domain: str,
+    wordlist: Path,
+    out_dir: Path,
+    rate: int = 100,
+    threads: int = 50,
+    timeout: int = 3,
+    max_time: int = 120,
+) -> list[dict]:
+    """Use ffuf Host-header discovery for virtual hosts that do not have DNS records."""
+    labels = []
+    seen = set()
+    for hostname in build_wordlist_candidates([root_domain], read_lines(wordlist)):
+        if hostname == root_domain:
+            continue
+        label = hostname[: -(len(root_domain) + 1)]
+        if label and label not in seen:
+            seen.add(label)
+            labels.append(label)
+
+    safe_root = re.sub(r"[^A-Za-z0-9.-]", "_", root_domain)
+    input_path = out_dir / f"vhost-wordlist-{safe_root}.txt"
+    raw_path = out_dir / f"vhost-raw-{safe_root}.json"
+    log_path = out_dir / f"ffuf-vhost-{safe_root}.log"
+    write_lines(input_path, labels)
+    if not labels:
+        return []
+
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError(f"Unsupported base URL for virtual-host discovery: {base_url}")
+    root_url = f"{parsed.scheme}://{parsed.netloc}/"
+    cmd = [
+        "ffuf", "-w", str(input_path), "-u", root_url,
+        "-H", f"Host: FUZZ.{root_domain}",
+        "-ac", "-noninteractive", "-of", "json", "-o", str(raw_path),
+        "-t", str(threads), "-rate", str(rate), "-timeout", str(timeout),
+        "-maxtime", str(max_time),
+    ]
+    print(
+        f"[+] Virtual-host discovery: {root_domain} "
+        f"({len(labels)} labels, {rate} requests/s cap, maximum {max_time}s)."
+    )
+    write_lines(log_path, ["COMMAND: " + " ".join(cmd)])
+    try:
+        with log_path.open("a", encoding="utf-8", errors="replace") as log:
+            process = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, text=True)
+            started = time.monotonic()
+            try:
+                while True:
+                    try:
+                        rc = process.wait(timeout=10)
+                        break
+                    except subprocess.TimeoutExpired:
+                        elapsed = int(time.monotonic() - started)
+                        print(
+                            f"[+] ffuf is still checking virtual hosts ({elapsed}s elapsed); "
+                            f"diagnostics: {log_path}"
+                        )
+            except KeyboardInterrupt:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                raise
+    except OSError as exc:
+        raise RuntimeError(f"Could not start ffuf: {exc}") from exc
+
+    if rc != 0:
+        raise RuntimeError(f"ffuf exited with code {rc}; inspect {log_path}")
+    if not raw_path.is_file():
+        return []
+    try:
+        document = json.loads(raw_path.read_text(encoding="utf-8", errors="replace"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"ffuf output is not valid JSON; inspect {raw_path}") from exc
+
+    valid_labels = set(labels)
+    rows = []
+    for item in document.get("results", []):
+        input_value = item.get("input") or {}
+        label = str(input_value.get("FUZZ", "")).strip().lower()
+        if label not in valid_labels:
+            continue
+        rows.append({
+            "virtual_host": f"{label}.{root_domain}",
+            "root_domain": root_domain,
+            "base_url": root_url,
+            "status_code": item.get("status", ""),
+            "content_length": item.get("length", ""),
+            "words": item.get("words", ""),
+            "lines": item.get("lines", ""),
+            "content_type": item.get("content-type", ""),
+            "redirect_location": item.get("redirectlocation", ""),
+        })
+    print(f"[+] Virtual-host candidates reported by ffuf: {len(rows)}")
+    return rows
+
+
+def write_vhost_outputs(rows: list[dict], out_dir: Path) -> None:
+    fields = [
+        "virtual_host", "root_domain", "base_url", "status_code",
+        "content_length", "words", "lines", "content_type", "redirect_location",
+    ]
+    with (out_dir / "vhost-findings.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    write_lines(out_dir / "vhost-subdomains.txt", [row["virtual_host"] for row in rows])
+    (out_dir / "vhost-findings.json").write_text(
+        json.dumps({"count": len(rows), "results": rows}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 def run_step(name: str, command: list[str], log_path: Path) -> int:
     """Run one external tool and preserve stdout/stderr in a log."""
     print(f"\n[+] {name}\n    $ {' '.join(command)}")
@@ -441,6 +574,12 @@ def main() -> int:
                         help="Per-query dnsx timeout in seconds (default: 2)")
     parser.add_argument("--dns-resolvers",
                         help="Comma-separated DNS resolver IPs; default reads /etc/resolv.conf")
+    parser.add_argument("--vhost-fuzz", action="store_true",
+                        help="Also enumerate HTTP virtual hosts using the wordlist and Host header")
+    parser.add_argument("--vhost-rate", type=int, default=100,
+                        help="Maximum ffuf virtual-host requests per second (default: 100)")
+    parser.add_argument("--vhost-max-time", type=int, default=120,
+                        help="Maximum seconds per root domain for virtual-host discovery (default: 120)")
     parser.add_argument("--no-nuclei", action="store_true", help="Skip Nuclei")
     parser.add_argument("--no-screenshots", action="store_true", help="Skip GoWitness")
     parser.add_argument("--no-login-check", action="store_true",
@@ -474,6 +613,12 @@ def main() -> int:
         parser.error("--dns-threads must be at least 1")
     if args.dns_timeout < 1:
         parser.error("--dns-timeout must be at least 1")
+    if args.vhost_rate < 1:
+        parser.error("--vhost-rate must be at least 1")
+    if args.vhost_max_time < 1:
+        parser.error("--vhost-max-time must be at least 1")
+    if args.vhost_fuzz and not args.wordlist:
+        parser.error("--vhost-fuzz requires --wordlist")
     if args.dns_resolvers:
         resolver_values = [value.strip() for value in args.dns_resolvers.split(",") if value.strip()]
         if not resolver_values:
@@ -523,6 +668,8 @@ def main() -> int:
         required.append("subfinder")
     if wordlist and roots:
         required.append("dnsx")
+    if args.vhost_fuzz:
+        required.append("ffuf")
     missing = ensure_tools(required)
     if missing:
         print("[ERROR] Required tools unavailable; no scan started: " + ", ".join(missing))
