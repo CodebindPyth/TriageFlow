@@ -22,6 +22,7 @@ from triageflow_enrichment import (
     write_software_inventory,
 )
 
+VERSION = "2.0.0"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -156,7 +157,9 @@ def save_report(out_dir: Path, status: dict) -> None:
         f"- Discovered subdomains: {status.get('subdomain_count', 0)}",
         f"- Combined targets: {status.get('target_count', 0)}",
         f"- Live URLs: {status.get('live_url_count', 0)}",
+        f"- Asset inventory rows: {status.get('asset_count', 0)}",
         f"- Software fingerprint rows: {status.get('software_fingerprint_count', 0)}",
+        f"- Default-credential review entries (manual only): {status.get('default_credential_review_count', 0)}",
         f"- Login panels found: {status.get('login_panel_count', 0)}",
         f"- CVE keyword candidates: {status.get('cve_candidate_count', 0)}",
         f"- Nuclei exit code: {status.get('nuclei_exit_code', 'not run')}",
@@ -168,11 +171,14 @@ def save_report(out_dir: Path, status: dict) -> None:
         "- all-targets.txt: deduplicated target list",
         "- live.txt: live URLs from httpx; shared by Nuclei and GoWitness",
         "- httpx-details.jsonl: JSONL response and technology fingerprints",
+        "- asset-inventory.csv: deduplicated web asset inventory",
         "- software-inventory.csv: observed products and available versions",
         "- login-panels.csv: likely login endpoints found with GET-only checks",
+        "- default-credentials-review.md/.csv: manual hardening checklist; no login attempts",
         "- cve-candidates.json and cve-candidates.md: NVD keyword search candidates",
         "- nuclei-findings.jsonl: Nuclei findings, if enabled",
-        "- gowitness/: screenshot artifacts, if enabled",
+        "- report.html: searchable one-file report, when enabled",
+        "- gowitness/: screenshots of live URLs including discovered live subdomains, if enabled",
         "- *.log: command output and troubleshooting details", "",
         "Only assess targets within your written authorization and scope.", ""
     ]
@@ -256,6 +262,21 @@ def interactive_setup(args: argparse.Namespace) -> bool:
         args.no_screenshots = True
         print("Quick profile selected. httpx, software inventory, CVE lookup, and login discovery stay enabled.")
 
+    screenshot_default = "1" if profile == "1" else "2"
+    screenshot_choice = prompt_choice(
+        "Capture screenshots of responding subdomains and web pages?",
+        {"1": "yes, use GoWitness screenshots", "2": "no, skip screenshots"},
+        screenshot_default,
+    )
+    args.no_screenshots = screenshot_choice == "2"
+
+    html_choice = prompt_choice(
+        "Generate a single-page HTML report?",
+        {"1": "yes, recommended", "2": "no, only CSV/JSON/Markdown"},
+        "1",
+    )
+    args.no_html_report = html_choice == "2"
+
     print("\nSetup complete. TriageFlow will check its tools next.")
     print("Before any scan starts, you must still confirm authorization by typing YES.\n")
     return True
@@ -292,6 +313,9 @@ def main() -> int:
                         help="Maximum distinct product/version pairs queried in NVD")
     parser.add_argument("--wizard", action="store_true",
                         help="Open the guided setup wizard")
+    parser.add_argument("--no-html-report", action="store_true",
+                        help="Skip the self-contained HTML report")
+    parser.add_argument("--version", action="version", version=f"TriageFlow {VERSION}")
     args = parser.parse_args()
 
     if args.wizard and (args.list or args.single_target):
@@ -358,12 +382,15 @@ def main() -> int:
     out_dir = Path(args.output).expanduser().resolve() / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=False)
     status = {
+        "version": VERSION,
+        "html_report_enabled": not args.no_html_report,
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "input_file": str(input_path) if input_path else None,
         "single_target": args.single_target if args.single_target else None,
         "root_domain_count": len(roots), "subdomain_count": 0,
-        "target_count": 0, "live_url_count": 0, "software_fingerprint_count": 0,
-        "login_panel_count": 0, "cve_candidate_count": 0, "stages": {}
+        "target_count": 0, "live_url_count": 0, "asset_count": 0,
+        "software_fingerprint_count": 0, "login_panel_count": 0,
+        "default_credential_review_count": 0, "cve_candidate_count": 0, "stages": {}
     }
 
     discovered: list[str] = []
