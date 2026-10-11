@@ -67,7 +67,7 @@ Subfinder and the custom wordlist are complementary. If discovery is disabled wi
 
 - **Version fingerprinting:** httpx runs with technology detection and records server/title/status metadata. Product/version strings that are exposed by the target are written to `software-inventory.csv`; many services intentionally hide or suppress precise versions, so an empty version is normal.
 - **Known-CVE candidates:** versioned products are searched through the official [NIST NVD API](https://nvd.nist.gov/developers/vulnerabilities). By default the tool queries at most five distinct product/version pairs to limit latency and API usage. Set the `NVD_API_KEY` environment variable to use an NVD API key. Review `cve-candidates.md` and `cve-candidates.json`: keyword results are leads, not proof of impact, and affected-version ranges must be checked manually.
-- **Login-panel discovery:** TriageFlow makes GET-only requests to a small set of common paths on up to 50 distinct live origins by default, then writes `login-panels.csv`. It does not submit usernames/passwords, follow redirects to other hosts, or attempt authentication. Use this inventory to plan an explicitly authorized manual configuration audit.
+- **Login-panel discovery:** TriageFlow makes GET-only requests to a small set of common paths on up to 25 distinct live origins by default, then writes `login-panels.csv`. It does not submit usernames/passwords, follow redirects, or attempt authentication. Use this inventory to plan an explicitly authorized manual configuration audit.
 - **Community contributions:** see `CONTRIBUTING.md` for the fork-and-pull-request workflow.
 
 ## Installation
@@ -134,7 +134,7 @@ python3 triageflow.py -u example.com --no-nuclei --no-screenshots
 | `--no-nuclei` | Skip the Nuclei stage. |
 | `--no-screenshots` | Skip the GoWitness stage. |
 | `--no-login-check` | Skip login-panel discovery. |
-| `--max-login-hosts` | Maximum number of distinct origins checked for login panels; default `50`. |
+| `--max-login-hosts` | Maximum number of distinct origins checked for login panels; default `25`. |
 | `--no-cve-lookup` | Skip NVD CVE candidate lookups. |
 | `--max-cve-products` | Maximum versioned product/version pairs queried in NVD; default `5`. |
 
