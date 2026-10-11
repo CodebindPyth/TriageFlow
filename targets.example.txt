@@ -1,0 +1,3 @@
+# Replace these examples with targets explicitly in scope.
+example.com
+https://www.example.org
