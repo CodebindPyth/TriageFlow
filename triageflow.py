@@ -156,7 +156,18 @@ def normalize_target(raw: str) -> str:
 def hostname_of(target: str) -> str:
     if "://" in target:
         return (urlparse(target).hostname or "").lower().rstrip(".")
-    return target.split(":", 1)[0].strip("[]").lower().rstrip(".")
+
+    value = target.strip()
+    # Preserve bare/bracketed IPv6 literals rather than mistaking the first
+    # colon-delimited segment for a hostname.
+    if value.startswith("[") and "]" in value:
+        return value[1:value.index("]")].lower().rstrip(".")
+    try:
+        ipaddress.ip_address(value)
+        return value.lower()
+    except ValueError:
+        pass
+    return value.split(":", 1)[0].strip("[]").lower().rstrip(".")
 
 
 def system_dns_resolvers() -> list[str]:
