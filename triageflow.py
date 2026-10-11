@@ -790,6 +790,18 @@ def main() -> int:
     if wordlist and not wordlist.is_file():
         print(f"[ERROR] Wordlist does not exist: {wordlist}", file=sys.stderr)
         return 2
+    if args.bruteforce_direct and not wordlist:
+        print(
+            "[ERROR] --bruteforce-direct needs an available or explicitly supplied wordlist.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.bruteforce_direct and not roots:
+        print(
+            "[ERROR] --bruteforce-direct requires a domain/hostname target, not only an IP address.",
+            file=sys.stderr,
+        )
+        return 2
 
     required = ["httpx"]
     if not args.no_nuclei:
