@@ -3,7 +3,7 @@
 ## 2.0.3 — 2026-10-11
 
 ### Changed
-- Direct CLI runs now use the bundled starter wordlist by default unless `--no-wordlist` is supplied; the guided wizard keeps its explicit wordlist choice.
+- Direct CLI runs first look for an existing SecLists DNS wordlist (`Discovery/DNS/subdomains-top1million-5000.txt`) and fall back to the bundled starter list; `--no-wordlist` opts out, while the wizard keeps its explicit choice.
 - Wordlist DNS discovery now runs before passive Subfinder discovery, and resolved wordlist results are prioritized in the combined target file.
 - Subfinder failures no longer discard successful wordlist discoveries; the pipeline continues with available direct and resolved targets and reports the failed stage.
 
@@ -12,7 +12,7 @@
 - The no-live-target path records Nuclei and GoWitness as skipped instead of leaving the stages absent.
 - HTML reports now display the actual run version rather than a hard-coded v2.0.1 string.
 - IPv6 targets are no longer truncated at the first colon during hostname parsing.
-- Added tests for bundled wordlist availability, target order, dynamic report versions, and IPv6 parsing.
+- Added tests for bundled wordlist availability, local wordlist selection, target order, dynamic report versions, and IPv6 parsing.
 
 ## 2.0.2 — 2026-10-11
 
