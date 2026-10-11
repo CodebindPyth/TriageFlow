@@ -1,4 +1,4 @@
-# TriageFlow v2.0.3 — Οδηγός χρήσης στα Ελληνικά
+# TriageFlow v2.0.4 — Οδηγός χρήσης στα Ελληνικά
 
 Αυτός είναι ο πρακτικός οδηγός για να ξεκινήσεις χωρίς να χρειάζεται να θυμάσαι παραμέτρους ή να γράφεις μεγάλες εντολές.
 
@@ -191,15 +191,25 @@ go version
 
 ### Δεν βρίσκει subdomains ή φαίνεται να κολλάει στο wordlist
 
-Η v2.0.3 χρησιμοποιεί `dnsx` για παράλληλα DNS checks και γράφει μηνύματα προόδου στο terminal και διαγνωστικά στο `dnsx.log`. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιούργησε από το wordlist· το `wordlist-resolved.txt` έχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια από αυτά έχουν HTTP/HTTPS υπηρεσία.
+Η v2.0.4 χρησιμοποιεί `dnsx` για παράλληλα DNS checks και γράφει μηνύματα προόδου στο terminal και διαγνωστικά στο `dnsx.log`. Το `wordlist-candidates.txt` περιέχει τα ονόματα που δημιούργησε από το wordlist· το `wordlist-resolved.txt` έχει όσα απάντησαν μέσω DNS. Έπειτα το `httpx` ελέγχει ποια από αυτά έχουν HTTP/HTTPS υπηρεσία.
 
-Αν δουλεύεις με lab domain όπως `inlanefreight.local`, βεβαιώσου ότι το Kali χρησιμοποιεί τον DNS resolver του lab. Εξ ορισμού η v2 διαβάζει τους resolvers από `/etc/resolv.conf` και ελέγχει και το system hosts file. Αν το lab δίνει διαφορετικό DNS server, πέρασέ τον ρητά, π.χ.:
+Αν δουλεύεις με lab domain όπως `inlanefreight.local`, βεβαιώσου ότι το Kali χρησιμοποιεί τον DNS resolver του lab. Πριν αρχίσει το DNS, το πρόγραμμα δείχνει το ακριβές path του wordlist και πόσες γραμμές εισόδου έχει. Το επίσημο `subdomains-top1million-5000.txt` έχει 5.000 γραμμές· αν δεις περίπου 100.000 candidates, έλεγξε μήπως χρησιμοποιείται διαφορετικό/μεγαλύτερο αρχείο. Οι scoped/link-local IPv6 nameservers όπως `fe80::1%eth1` αγνοούνται, επειδή δεν είναι ασφαλές να περαστούν έτσι στη λίστα resolver του dnsx. Η v2 διαβάζει τους υπόλοιπους resolvers από `/etc/resolv.conf` και ελέγχει και το system hosts file. Αν το lab δίνει διαφορετικό DNS server, πέρασέ τον ρητά, π.χ.:
 
 ```bash
 python3 triageflow.py -u inlanefreight.local -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt --dns-resolvers 10.0.0.1
 ```
 
 Αντικατάστησε το `10.0.0.1` με την πραγματική DNS IP που παρέχει το lab. Μην υποθέτεις ότι αυτή η IP είναι σωστή για το δικό σου περιβάλλον.
+
+Για να εξακριβώσεις ποιο αρχείο χρησιμοποιήθηκε και πόσο μεγάλο είναι, σταμάτησε την τρέχουσα εκτέλεση με `Ctrl+C` και έλεγξε:
+
+```bash
+wc -l /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt
+wc -l /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt
+wc -l triageflow-results/20261011-115310/wordlist-candidates.txt
+```
+
+Η τελευταία διαδρομή είναι παράδειγμα από ένα run· βάλε τον πραγματικό φάκελο αποτελεσμάτων σου. Το μήνυμα προόδου ανά 10 δευτερόλεπτα σημαίνει ότι το `dnsx` δεν έχει ολοκληρώσει ακόμη, όχι ότι βρήκε ευρήματα.
 
 Το `.local` συνήθως ανήκει σε εσωτερικό/lab namespace, οπότε το Subfinder μπορεί να μην επιστρέψει παθητικά subdomains από δημόσιες πηγές. Επίσης, το ότι ένα όνομα απαντά στο DNS δεν σημαίνει ότι έχει web service· αυτό ελέγχεται στο επόμενο στάδιο με httpx.
 
