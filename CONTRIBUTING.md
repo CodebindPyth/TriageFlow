@@ -1,6 +1,6 @@
 # Contributing to TriageFlow
 
-Thanks for helping improve TriageFlow! Contributions are welcome through GitHub forks and pull requests.
+Thanks for helping improve TriageFlow! Contributions are welcome through GitHub forks and pull requests. New users can start with [QUICKSTART_EL.md](QUICKSTART_EL.md) for the step-by-step Greek usage guide.
 
 ## Before you start
 
