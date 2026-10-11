@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.2"
+VERSION = "2.0.3"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -104,6 +104,21 @@ def ensure_tools(required: list[str]) -> list[str]:
             print(f"[ERROR] Installation failed for {name}; try: go install {install_path}")
 
     return [name for name in required if shutil.which(name) is None]
+
+
+def bundled_wordlist_path() -> Path:
+    """Return the repository's built-in starter wordlist."""
+    return Path(__file__).resolve().parent / "wordlists" / "subdomains-small.txt"
+
+
+def combine_targets(
+    direct: list[str],
+    roots: list[str],
+    wordlist_names: list[str],
+    passive_names: list[str],
+) -> list[str]:
+    """Deduplicate targets while prioritizing wordlist discoveries before passive results."""
+    return list(dict.fromkeys([*direct, *roots, *wordlist_names, *passive_names]))
 
 
 def read_lines(path: Path) -> list[str]:
@@ -536,7 +551,7 @@ def interactive_setup(args: argparse.Namespace) -> bool:
         args.single_target = None
 
     if not args.wordlist:
-        bundled_wordlist = Path(__file__).resolve().parent / "wordlists" / "subdomains-small.txt"
+        bundled_wordlist = bundled_wordlist_path()
         wordlist_mode = prompt_choice(
             "Subdomain wordlist?",
             {"1": "use included small wordlist", "2": "use my own wordlist", "3": "none"},
@@ -603,6 +618,11 @@ def main() -> int:
     inputs.add_argument("-l", "--list", help="Input file: one domain, host, IP, or URL per line")
     inputs.add_argument("-u", "--url", dest="single_target", help="One domain, host, IP, or URL")
     parser.add_argument("-w", "--wordlist", help="Custom subdomain wordlist, one entry per line")
+    parser.add_argument(
+        "--no-wordlist",
+        action="store_true",
+        help="Skip the bundled default wordlist when -w is not provided",
+    )
     parser.add_argument("-o", "--output", default="triageflow-results", help="Output base directory")
     parser.add_argument("--severity", default="medium,high,critical", help="Nuclei severities")
     parser.add_argument("--no-subdomains", action="store_true", help="Skip Subfinder")
@@ -636,16 +656,27 @@ def main() -> int:
                         help="Skip the self-contained HTML report")
     parser.add_argument("--version", action="version", version=f"TriageFlow {VERSION}")
     args = parser.parse_args()
+    wizard_mode = args.wizard or (not args.list and not args.single_target)
 
+    if args.no_wordlist and args.wordlist:
+        parser.error("--no-wordlist cannot be combined with --wordlist")
     if args.wizard and (args.list or args.single_target):
         parser.error("--wizard cannot be combined with --url or --list")
-    if args.wizard or (not args.list and not args.single_target):
+    if wizard_mode:
         try:
             if not interactive_setup(args):
                 return 1
         except (KeyboardInterrupt, EOFError):
             print("\nCancelled.")
             return 1
+
+    # For non-interactive CLI use, start with the included wordlist unless disabled.
+    # The wizard keeps its own explicit yes/no choice.
+    if not wizard_mode and not args.wordlist and not args.no_wordlist:
+        default_wordlist = bundled_wordlist_path()
+        if default_wordlist.is_file():
+            args.wordlist = str(default_wordlist)
+            print(f"[+] Using bundled starter wordlist: {default_wordlist}")
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1")
@@ -747,22 +778,12 @@ def main() -> int:
         "vhost_count": 0, "stages": {}
     }
 
+    pipeline_failures: list[str] = []
     discovered: list[str] = []
-    if not args.no_subdomains and roots:
-        roots_file, sub_file = out_dir / "root-domains.txt", out_dir / "subdomains.txt"
-        write_lines(roots_file, roots)
-        cmd = ["subfinder", "-dL", str(roots_file), "-silent", "-o", str(sub_file)]
-        if args.subfinder_all:
-            cmd.insert(1, "-all")
-        rc = run_step("Subfinder: passive subdomain discovery", cmd, out_dir / "subfinder.log")
-        status["stages"]["subfinder"] = rc
-        if rc:
-            save_report(out_dir, status)
-            return rc
-        if sub_file.exists():
-            discovered = read_lines(sub_file)
-
     wordlist_names: list[str] = []
+
+    # Run the supplied/bundled wordlist first so its results are ready for the
+    # main target-probing stage even when passive discovery later fails.
     if wordlist and roots:
         if args.dns_resolvers:
             resolvers = [value.strip() for value in args.dns_resolvers.split(",") if value.strip()]
@@ -789,10 +810,36 @@ def main() -> int:
             save_report(out_dir, status)
             return 130
         except (OSError, RuntimeError, ValueError) as exc:
-            print(f"[ERROR] Wordlist DNS resolution failed: {exc}", file=sys.stderr)
+            print(
+                f"[WARN] Wordlist DNS resolution failed: {exc}. "
+                "Continuing with the remaining discovery stages.",
+                file=sys.stderr,
+            )
             status["stages"]["wordlist_dns"] = {"status": "failed", "error": str(exc)}
-            save_report(out_dir, status)
-            return 2
+            pipeline_failures.append("wordlist DNS")
+
+    # Passive discovery is complementary; it must not discard successfully
+    # resolved wordlist targets if Subfinder errors or returns partial output.
+    if not args.no_subdomains and roots:
+        roots_file, sub_file = out_dir / "root-domains.txt", out_dir / "subdomains.txt"
+        write_lines(roots_file, roots)
+        cmd = ["subfinder", "-dL", str(roots_file), "-silent", "-o", str(sub_file)]
+        if args.subfinder_all:
+            cmd.insert(1, "-all")
+        rc = run_step("Subfinder: passive subdomain discovery", cmd, out_dir / "subfinder.log")
+        status["stages"]["subfinder"] = rc
+        if sub_file.exists():
+            try:
+                discovered = read_lines(sub_file)
+            except OSError as exc:
+                print(f"[WARN] Could not read Subfinder output: {exc}", file=sys.stderr)
+        if rc:
+            print(
+                f"[WARN] Subfinder exited with code {rc}; continuing with any wordlist "
+                "and direct-target results.",
+                file=sys.stderr,
+            )
+            pipeline_failures.append("subfinder")
 
     vhost_rows: list[dict] = []
     vhost_hosts: list[str] = []
@@ -858,7 +905,7 @@ def main() -> int:
         else:
             status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains; use --vhost-fuzz to run both)"
 
-    combined = list(dict.fromkeys(direct + roots + discovered + wordlist_names))
+    combined = combine_targets(direct, roots, wordlist_names, discovered)
     combined_file, live_file = out_dir / "all-targets.txt", out_dir / "live.txt"
     write_lines(combined_file, combined)
     status["subdomain_count"] = len(set(discovered + wordlist_names + vhost_hosts))
@@ -888,10 +935,12 @@ def main() -> int:
         print("[!] No live web URLs found or httpx JSON output could not be parsed; downstream stages skipped.")
         status["stages"]["login_panels"] = "skipped: no live URLs"
         status["stages"]["cve_lookup"] = "skipped: no live URLs"
+        status["stages"]["nuclei"] = "skipped: no live URLs"
+        status["stages"]["gowitness"] = "skipped: no live URLs"
         save_report(out_dir, status)
-        return 0
+        return 1 if pipeline_failures else 0
 
-    failures = []
+    failures = list(pipeline_failures)
     if args.no_login_check:
         status["stages"]["login_panels"] = "skipped"
     else:
