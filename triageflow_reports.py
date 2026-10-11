@@ -245,6 +245,7 @@ def generate_html_report(output_dir: Path, status: dict) -> Path:
     assets = read_csv_rows(output_dir / "asset-inventory.csv")
     software = read_csv_rows(output_dir / "software-inventory.csv")
     panels = read_csv_rows(output_dir / "login-panels.csv")
+    vhosts = read_csv_rows(output_dir / "vhost-findings.csv")
     default_review = read_csv_rows(output_dir / "default-credentials-review.csv")
     cve_doc = _load_json(output_dir / "cve-candidates.json", {})
     cve_rows = []
@@ -278,6 +279,7 @@ def generate_html_report(output_dir: Path, status: dict) -> Path:
         ("Subdomains", status.get("subdomain_count", 0)),
         ("Software rows", status.get("software_fingerprint_count", len(software))),
         ("Login panels", status.get("login_panel_count", len(panels))),
+        ("Virtual hosts", status.get("vhost_count", len(vhosts))),
         ("CVE candidates", status.get("cve_candidate_count", len(cve_rows))),
         ("Nuclei findings", len(nuclei_rows)),
     ]
@@ -317,6 +319,16 @@ footer{padding:2rem;color:#9caec4;text-align:center}
             ("url", "URL"), ("product", "Product"), ("version", "Version"),
             ("source", "Source"), ("raw_fingerprint", "Observed fingerprint"),
         ], software, "No software fingerprints were parsed."),
+        _table("HTTP virtual hosts", [
+            ("virtual_host", "Virtual host"),
+            ("base_url", "Base URL (request target)"),
+            ("status_code", "HTTP status"),
+            ("content_length", "Response length"),
+            ("words", "Words"),
+            ("lines", "Lines"),
+            ("content_type", "Content type"),
+            ("redirect_location", "Redirect"),
+        ], vhosts, "No virtual-host results recorded. Host-header discovery may have been skipped."),
         _table("Potential CVE matches", [
             ("product", "Product/version"), ("cve_link", "CVE"), ("severity", "Severity"),
             ("cvss_score", "CVSS"), ("description", "Description"), ("match_method", "Match method"),
