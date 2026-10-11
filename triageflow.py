@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -187,8 +188,8 @@ def discover_wordlist(
         dns_resolvers = system_dns_resolvers()
     cmd = [
         "dnsx", "-l", str(candidates_path), "-silent", "-no-color",
-        "-timeout", str(dns_timeout), "-retry", "1", "-t", str(dns_threads),
-        "-hostsfile", "-o", str(resolved_path),
+        "-auto-wildcard", "-timeout", str(dns_timeout), "-retry", "1",
+        "-t", str(dns_threads), "-hostsfile", "-o", str(resolved_path),
     ]
     if dns_resolvers:
         cmd.extend(["-r", ",".join(dns_resolvers)])
@@ -206,8 +207,18 @@ def discover_wordlist(
     try:
         with log_path.open("a", encoding="utf-8", errors="replace") as log:
             process = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, text=True)
+            started = time.monotonic()
             try:
-                rc = process.wait()
+                while True:
+                    try:
+                        rc = process.wait(timeout=10)
+                        break
+                    except subprocess.TimeoutExpired:
+                        elapsed = int(time.monotonic() - started)
+                        print(
+                            f"[+] dnsx is still resolving candidates ({elapsed}s elapsed); "
+                            f"diagnostics: {log_path}"
+                        )
             except KeyboardInterrupt:
                 process.terminate()
                 try:
