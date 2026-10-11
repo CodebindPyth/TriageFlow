@@ -36,6 +36,9 @@ class EnsureToolsTests(unittest.TestCase):
             existing_tool = custom_gobin / "httpx"
             existing_tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             existing_tool.chmod(0o755)
+            gopath_tool = custom_gopath_bin / "gowitness"
+            gopath_tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            gopath_tool.chmod(0o755)
 
             environment = {
                 "PATH": str(commands),
@@ -45,10 +48,11 @@ class EnsureToolsTests(unittest.TestCase):
             with patch.object(triageflow, "GO_BIN", default_go_bin), patch.dict(
                 os.environ, environment, clear=False
             ):
-                result = triageflow.ensure_tools(["httpx"])
+                result = triageflow.ensure_tools(["httpx", "gowitness"])
 
             self.assertEqual(result, [])
             self.assertTrue(existing_tool.is_file())
+            self.assertTrue(gopath_tool.is_file())
 
 
 if __name__ == "__main__":
