@@ -2,6 +2,8 @@
 
 **TriageFlow** is a Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
+> **New here?** Start with the [Greek step-by-step guide](QUICKSTART_EL.md), or simply run `python3 triageflow.py` to open the guided setup wizard. You do not need to memorize command-line options.
+>
 > **Authorization only:** Run this tool only against systems you own or targets explicitly included in your written authorization, lab, or bug-bounty scope. The confirmation prompt is an operational reminder, not a substitute for permission.
 
 ## Why TriageFlow?
@@ -51,14 +53,22 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
                 v
               httpx
                 |
-           live.txt
-          /         \
-         v           v
-      Nuclei      GoWitness
-   JSONL findings  screenshots
-          \         /
-           v       v
-       Logs + summaries
+       live URLs + JSONL
+                |
+       +--------+---------+
+       |        |         |
+       v        v         v
+   Inventory  NVD CVEs  Login panels
+       |        |         |
+       +--------+---------+
+                |
+          +-----+-----+
+          v           v
+        Nuclei     GoWitness
+       findings    screenshots
+          +-----------+
+                |
+          Logs + summary
 ```
 
 Subfinder and the custom wordlist are complementary. If discovery is disabled with `--no-subdomains`, the wordlist can still be used; Subfinder will be skipped. Wordlist DNS resolution is a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
@@ -81,17 +91,31 @@ Subfinder and the custom wordlist are complementary. If discovery is disabled wi
 
 TriageFlow checks for required executables. When a tool is missing, it attempts `go install` into `~/go/bin` if Go is available, and reports tools that remain unavailable. Ensure `~/go/bin` is on `PATH` for later terminal sessions. Automatic installation can fail because of network restrictions, Go-version incompatibilities, or OS package-manager problems; inspect the messages and logs rather than assuming installation succeeded.
 
-### Clone and inspect options
+### Clone and start (recommended for beginners)
 
 ```bash
 git clone https://github.com/CodebindPyth/TriageFlow.git
 cd TriageFlow
+python3 triageflow.py
+```
+
+Running the program **without arguments** opens the guided wizard. It asks whether you want to scan one target or a file, which wordlist to use, and whether you want the Standard or Quick profile. Before any scan starts, it still requires the authorization confirmation.
+
+To see every CLI option without starting a scan:
+
+```bash
 python3 triageflow.py --help
 ```
+
+You can explicitly launch the same wizard with `python3 triageflow.py --wizard`. See [QUICKSTART_EL.md](QUICKSTART_EL.md) for explanations in Greek, output files, troubleshooting, and example commands.
 
 No third-party Python packages are required for the CLI itself. The security tools are separate executables.
 
 ## Usage
+
+**Beginner path:** run `python3 triageflow.py` with no arguments and follow the prompts. Choose **Standard** for all enabled stages or **Quick** to skip Subfinder, Nuclei, and screenshots.
+
+For direct CLI use:
 
 ```bash
 # One authorized domain; Subfinder discovery enabled
