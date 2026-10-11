@@ -99,10 +99,11 @@ Subfinder and the custom wordlist are complementary. If discovery is disabled wi
 
 - Python 3.10+
 - Go (needed only if you want TriageFlow to attempt automatic installation of missing Go-based tools)
+- Chrome or Chromium when screenshots are enabled, plus the applicable GoWitness CLI
 - ProjectDiscovery `httpx`, `nuclei`, `subfinder`, and `gowitness`, depending on which stages you want to run
 - Network/DNS access appropriate to your authorized environment
 
-TriageFlow checks for required executables. When a tool is missing, it attempts `go install` into `~/go/bin` if Go is available, and reports tools that remain unavailable. Ensure `~/go/bin` is on `PATH` for later terminal sessions. Automatic installation can fail because of network restrictions, Go-version incompatibilities, or OS package-manager problems; inspect the messages and logs rather than assuming installation succeeded.
+TriageFlow checks for required executables. When a tool is missing, it attempts `go install` into `~/go/bin` if Go is available, and reports tools that remain unavailable. If screenshots are enabled but Chrome/Chromium cannot be found on `PATH`, it prints a warning before the scan starts. Ensure `~/go/bin` is on `PATH` for later terminal sessions. Automatic installation can fail because of network restrictions, Go-version incompatibilities, or OS package-manager problems; inspect the messages and logs rather than assuming installation succeeded.
 
 ### Clone and start (recommended for beginners)
 
