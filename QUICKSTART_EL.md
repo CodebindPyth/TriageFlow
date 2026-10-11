@@ -227,6 +227,21 @@ python3 vhost_direct.py \
 
 Το wordlist πρέπει να έχει ένα label ανά γραμμή (π.χ. admin, dev, portal). Το URL βάσης πρέπει να είναι προσβάσιμο από το Kali. Πριν στείλει αιτήματα, το script ζητά επιβεβαίωση εξουσιοδότησης. Τα αποτελέσματα αποθηκεύονται σε νέο timestamped φάκελο κάτω από `triageflow-results/`: `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt` και `ffuf-vhost.log`. Είναι ξεχωριστά από το `live.txt` του βασικού pipeline.
 
+### Brute-force στο κανονικό `triageflow.py` χωρίς ξεχωριστό dnsx
+
+Η επιλογή `--bruteforce-direct` στέλνει τους υποψήφιους hostnames από το wordlist κατευθείαν στο `httpx`, παρακάμπτοντας το ξεχωριστό στάδιο `dnsx` και το Subfinder. Το `httpx` εξακολουθεί να χρειάζεται DNS resolution εσωτερικά για να συνδεθεί σε hostname· απλώς δεν προηγείται ανεξάρτητο πέρασμα με `dnsx`.
+
+```bash
+python3 triageflow.py \
+  -u http://inlanefreight.local/ \
+  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt \
+  --bruteforce-direct \
+  --bruteforce-rate 50 \
+  --no-nuclei --no-screenshots
+```
+
+Η λειτουργία παρακάμπτει Subfinder και `dnsx`, αλλά διατηρεί το υπόλοιπο pipeline για τα URLs που ανταποκρίνονται. Το όριο του `httpx` είναι προεπιλεγμένα 50 αιτήματα/δευτερόλεπτο και αλλάζει με `--bruteforce-rate`. Τα `wordlist-candidates.txt` και `wordlist-live.txt` αποθηκεύουν αντίστοιχα τους υποψήφιους hosts και όσους επέστρεψαν live HTTP αποτέλεσμα. Χρησιμοποίησέ το μόνο σε στόχους που ανήκουν σε εγκεκριμένο scope.
+
 ### Virtual-host discovery όταν η DNS αναζήτηση επιστρέφει μηδέν
 
 Σε ορισμένα lab περιβάλλοντα, όπως το `inlanefreight.local`, ο web server μπορεί να εξυπηρετεί διαφορετικές εφαρμογές ανάλογα με το HTTP `Host` header, παρότι τα αντίστοιχα ονόματα δεν έχουν ξεχωριστές DNS εγγραφές. Σε αυτήν την περίπτωση το DNS wordlist δεν αρκεί.
