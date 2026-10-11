@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.2 — 2026-10-11
+
+### Fixed
+- Tool preflight now checks `PATH`, `~/go/bin`, and configured Go `GOBIN`/`GOPATH` binary directories before installing anything.
+- Existing Go tools are reused; `go install` is attempted only for binaries that are still missing after checking those paths.
+- Added a regression test for an already-installed tool in a custom `GOBIN` directory.
+
 ## 2.0.1 — 2026-10-11
 
 ### Fixed
