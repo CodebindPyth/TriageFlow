@@ -14,6 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from triageflow_enrichment import (
+    detect_login_panels,
+    httpx_url,
+    query_nvd_cves,
+    read_httpx_jsonl,
+    write_software_inventory,
+)
+
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -179,10 +187,22 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=10, help="httpx timeout in seconds")
     parser.add_argument("--no-nuclei", action="store_true", help="Skip Nuclei")
     parser.add_argument("--no-screenshots", action="store_true", help="Skip GoWitness")
+    parser.add_argument("--no-login-check", action="store_true",
+                        help="Skip bounded GET-only login-panel discovery")
+    parser.add_argument("--max-login-hosts", type=int, default=50,
+                        help="Maximum distinct live origins checked for login panels (default: 50)")
+    parser.add_argument("--no-cve-lookup", action="store_true",
+                        help="Skip NVD lookups for observed product/version candidates")
+    parser.add_argument("--max-cve-products", type=int, default=5,
+                        help="Maximum distinct product/version pairs queried in NVD (default: 5)")
     args = parser.parse_args()
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1")
+    if args.max_login_hosts < 1:
+        parser.error("--max-login-hosts must be at least 1")
+    if args.max_cve_products < 1:
+        parser.error("--max-cve-products must be at least 1")
 
     try:
         input_path = Path(args.list).expanduser().resolve() if args.list else None
@@ -235,7 +255,8 @@ def main() -> int:
         "input_file": str(input_path) if input_path else None,
         "single_target": args.single_target if args.single_target else None,
         "root_domain_count": len(roots), "subdomain_count": 0,
-        "target_count": 0, "live_url_count": 0, "stages": {}
+        "target_count": 0, "live_url_count": 0, "software_fingerprint_count": 0,
+        "login_panel_count": 0, "cve_candidate_count": 0, "stages": {}
     }
 
     discovered: list[str] = []
@@ -268,22 +289,61 @@ def main() -> int:
     status["subdomain_count"] = len(set(discovered + wordlist_names))
     status["target_count"] = len(combined)
 
-    rc = run_step("httpx: identify live HTTP/HTTPS services",
+    details_file = out_dir / "httpx-details.jsonl"
+    rc = run_step("httpx: identify live services and fingerprint technologies",
                   ["httpx", "-l", str(combined_file), "-silent", "-no-color",
-                   "-timeout", str(args.timeout), "-o", str(live_file)], out_dir / "httpx.log")
+                   "-timeout", str(args.timeout), "-td", "-server", "-title",
+                   "-status-code", "-json", "-o", str(details_file)], out_dir / "httpx.log")
     status["stages"]["httpx"] = rc
     if rc:
         save_report(out_dir, status)
         return rc
 
-    live = read_lines(live_file) if live_file.exists() else []
+    httpx_records = read_httpx_jsonl(details_file)
+    live = list(dict.fromkeys(
+        httpx_url(record) for record in httpx_records if httpx_url(record)
+    ))
+    write_lines(live_file, live)
+    fingerprints = write_software_inventory(httpx_records, out_dir / "software-inventory.csv")
     status["live_url_count"] = len(live)
+    status["software_fingerprint_count"] = len(fingerprints)
     if not live:
-        print("[!] No live web URLs found; downstream stages skipped.")
+        print("[!] No live web URLs found or httpx JSON output could not be parsed; downstream stages skipped.")
+        status["stages"]["login_panels"] = "skipped: no live URLs"
+        status["stages"]["cve_lookup"] = "skipped: no live URLs"
         save_report(out_dir, status)
         return 0
 
     failures = []
+    if args.no_login_check:
+        status["stages"]["login_panels"] = "skipped"
+    else:
+        try:
+            panels = detect_login_panels(
+                live, out_dir / "login-panels.csv",
+                max_hosts=args.max_login_hosts, timeout=min(float(args.timeout), 5.0),
+            )
+            status["login_panel_count"] = len(panels)
+            status["stages"]["login_panels"] = {"status": "completed", "found": len(panels)}
+        except Exception as exc:
+            status["stages"]["login_panels"] = {"status": "failed", "error": str(exc)}
+            print(f"[!] Login-panel discovery failed: {exc}")
+            failures.append("login-panel discovery")
+
+    if args.no_cve_lookup:
+        status["stages"]["cve_lookup"] = "skipped"
+    else:
+        try:
+            cve_summary = query_nvd_cves(
+                fingerprints, out_dir / "cve-candidates.json",
+                max_products=args.max_cve_products,
+            )
+            status["cve_candidate_count"] = cve_summary.get("cve_candidates", 0)
+            status["stages"]["cve_lookup"] = {"status": "completed", **cve_summary}
+        except Exception as exc:
+            status["stages"]["cve_lookup"] = {"status": "failed", "error": str(exc)}
+            print(f"[!] NVD CVE lookup failed: {exc}")
+            failures.append("CVE lookup")
     if args.no_nuclei:
         status["stages"]["nuclei"] = "skipped"
     else:
