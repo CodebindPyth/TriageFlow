@@ -229,18 +229,17 @@ python3 vhost_direct.py \
 
 ### Brute-force στο κανονικό `triageflow.py` χωρίς ξεχωριστό dnsx
 
-Η επιλογή `--bruteforce-direct` στέλνει τους υποψήφιους hostnames από το wordlist κατευθείαν στο `httpx`, παρακάμπτοντας το ξεχωριστό στάδιο `dnsx` και το Subfinder. Το `httpx` εξακολουθεί να χρειάζεται DNS resolution εσωτερικά για να συνδεθεί σε hostname· απλώς δεν προηγείται ανεξάρτητο πέρασμα με `dnsx`.
+Η επιλογή `--bruteforce-direct` στέλνει τους υποψήφιους hostnames από το wordlist κατευθείαν στο `httpx`, παρακάμπτοντας μόνο το ξεχωριστό στάδιο προεπίλυσης `dnsx`. Το Subfinder συνεχίζει να τρέχει κανονικά, εκτός αν δώσεις `--no-subdomains`. Το `httpx` εξακολουθεί να χρειάζεται DNS resolution εσωτερικά για να συνδεθεί σε hostname.
 
 ```bash
 python3 triageflow.py \
   -u http://inlanefreight.local/ \
   -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt \
   --bruteforce-direct \
-  --bruteforce-rate 50 \
-  --no-nuclei --no-screenshots
+  --bruteforce-rate 10
 ```
 
-Η λειτουργία παρακάμπτει Subfinder και `dnsx`, αλλά διατηρεί το υπόλοιπο pipeline για τα URLs που ανταποκρίνονται. Το όριο του `httpx` είναι προεπιλεγμένα 50 αιτήματα/δευτερόλεπτο και αλλάζει με `--bruteforce-rate`. Τα `wordlist-candidates.txt` και `wordlist-live.txt` αποθηκεύουν αντίστοιχα τους υποψήφιους hosts και όσους επέστρεψαν live HTTP αποτέλεσμα. Χρησιμοποίησέ το μόνο σε στόχους που ανήκουν σε εγκεκριμένο scope.
+Η λειτουργία παρακάμπτει μόνο την ανεξάρτητη προεπίλυση `dnsx`, αλλά διατηρεί το Subfinder εκτός αν επιλέξεις `--no-subdomains`. Εξ ορισμού είναι ενεργά τα login-panel checks, το CVE lookup, το Nuclei, τα screenshots μέσω GoWitness και το HTML report. Κάθε στάδιο απενεργοποιείται σκόπιμα με το αντίστοιχο `--no-login-check`, `--no-cve-lookup`, `--no-nuclei` ή `--no-screenshots`. Το όριο του `httpx` είναι προεπιλεγμένα 50 αιτήματα/δευτερόλεπτο και αλλάζει με `--bruteforce-rate`. Τα `wordlist-candidates.txt` και `wordlist-live.txt` αποθηκεύουν αντίστοιχα τους υποψήφιους hosts και όσους επέστρεψαν live HTTP αποτέλεσμα. Το HTML report εμφανίζει τα screenshots από τον γειτονικό φάκελο `gowitness/`, οπότε κράτησέ τον μαζί με το `report.html`. Χρησιμοποίησέ το μόνο σε στόχους που ανήκουν σε εγκεκριμένο scope.
 
 ### Virtual-host discovery όταν η DNS αναζήτηση επιστρέφει μηδέν
 
@@ -266,7 +265,7 @@ python3 triageflow.py -u http://inlanefreight.local/ --no-subdomains \
 
 ### Δεν βρέθηκαν login panels
 
-Αυτό δεν αποδεικνύει ότι δεν υπάρχει σελίδα login. Μπορεί να έχει διαφορετική διαδρομή, να απαιτεί JavaScript ή να μπλοκάρει αυτοματοποιημένα αιτήματα. Το TriageFlow ελέγχει μόνο ένα μικρό, σταθερό σύνολο διαδρομών.
+Η v2.0.8 ελέγχει αρχικά την αρχική σελίδα, διαδρομές login που εμφανίζονται συχνά και συνδέσμους ίδιας προέλευσης (same-origin) με ενδείξεις login/account/portal που βρίσκονται στο HTML. Το `login-discovery-summary.json` δείχνει πόσα origins και URLs ελέγχθηκαν, πόσες HTML σελίδες διαβάστηκαν και πόσα login-like links εντοπίστηκαν. Αυτό εξακολουθεί να μην εγγυάται την εύρεση login pages που εμφανίζονται αποκλειστικά με JavaScript ή βρίσκονται πίσω από μη συνδεδεμένες/custom διαδρομές.
 
 ### Πώς να καταλάβω τα αποτελέσματα CVE;
 
@@ -274,7 +273,7 @@ python3 triageflow.py -u http://inlanefreight.local/ --no-subdomains \
 
 ### Τι σημαίνει το default-credentials review;
 
-Το `default-credentials-review.md` δεν κάνει login. Δίνει στα panels που εντόπισε ένα checklist για επιβεβαίωση ότι άλλαξαν οι αρχικοί κωδικοί, απενεργοποιήθηκαν άχρηστοι λογαριασμοί, ενεργοποιήθηκε MFA όπου υποστηρίζεται και περιορίστηκε η πρόσβαση στα admin panels. Για πραγματικό έλεγχο, ακολούθησε την εγκεκριμένη διαδικασία του οργανισμού ή δοκίμασε σε ξεχωριστό lab.
+Το `default-credentials-review.md` δεν κάνει login και δεν δοκιμάζει κωδικούς. Δίνει στα panels που εντόπισε ένα checklist για επιβεβαίωση ότι άλλαξαν οι αρχικοί κωδικοί, απενεργοποιήθηκαν άχρηστοι λογαριασμοί, ενεργοποιήθηκε MFA όπου υποστηρίζεται και περιορίστηκε η πρόσβαση στα admin panels. Για πραγματικό έλεγχο, ακολούθησε την εγκεκριμένη διαδικασία του οργανισμού ή δοκίμασε σε ξεχωριστό lab.
 
 ### Τα CVE ή τα Nuclei findings μοιάζουν ύποπτα
 
@@ -297,7 +296,7 @@ sudo apt --fix-broken install
 - Επίλεξε το μικρότερο scope που χρειάζεσαι και σεβάσου τα όρια του προγράμματος/bug bounty.
 - Μην θεωρείς την απουσία ευρημάτων απόδειξη ασφάλειας.
 - Μην θεωρείς μία CVE keyword match ή CPE heuristic απόδειξη ευπάθειας.
-- Το εργαλείο δεν δοκιμάζει default credentials· το checklist βοηθά σε χειροκίνητο, εγκεκριμένο configuration audit.
+- Το εργαλείο δεν δοκιμάζει default credentials· το checklist βοηθά σε χειροκίνητο, εγκεκριμένο configuration audit. Η ανίχνευση login pages γίνεται με GET requests και δεν πραγματοποιεί authentication.
 - Προστάτευσε τα CSV, logs και screenshots και μην τα δεσμεύεις στο Git.
 - Για συνεισφορές, διάβασε το [CONTRIBUTING.md](CONTRIBUTING.md).
 
