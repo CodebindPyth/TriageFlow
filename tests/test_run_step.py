@@ -18,10 +18,10 @@ class RunStepProgressTests(unittest.TestCase):
                 "import sys, time; "
                 "from pathlib import Path; "
                 "p = Path(sys.argv[1]); "
-                "p.write_text('first\\n', encoding='utf-8'); "
-                "time.sleep(0.12); "
-                "p.open('a', encoding='utf-8').write('second\\n'); "
-                "time.sleep(0.12)"
+                "p.write_text('first' + chr(10), encoding='utf-8'); "
+                "time.sleep(0.25); "
+                "p.open('a', encoding='utf-8').write('second' + chr(10)); "
+                "time.sleep(0.25)"
             )
 
             captured = io.StringIO()
