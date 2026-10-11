@@ -52,6 +52,21 @@ python3 vhost_direct.py \
 
 Use a wordlist of single labels (for example, admin, dev, portal). The base URL itself must be reachable from Kali; the script asks you to confirm authorization before sending requests. Results are saved in a timestamped directory under `triageflow-results/`: `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt`, and `ffuf-vhost.log`. These results are separate from the main `triageflow.py` pipeline's `live.txt`.
 
+## Direct wordlist brute-force in the main TriageFlow pipeline
+
+Use `--bruteforce-direct` when you want the **normal `triageflow.py` pipeline** to queue wordlist-generated hostname candidates directly for `httpx`, without the separate `dnsx` pre-resolution stage and without Subfinder. `httpx` still has to resolve hostnames internally to connect to web services, so this does not mean DNS is never used; it means there is no standalone `dnsx` pass before HTTP probing.
+
+```bash
+python3 triageflow.py \
+  -u http://inlanefreight.local/ \
+  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt \
+  --bruteforce-direct \
+  --bruteforce-rate 50 \
+  --no-nuclei --no-screenshots
+```
+
+The direct mode skips Subfinder and `dnsx`, feeds the generated candidates to `httpx`, and keeps the normal inventory/report stages for responsive URLs. The request-rate limit defaults to 50 requests per second and can be adjusted with `--bruteforce-rate`. Candidate names are recorded in `wordlist-candidates.txt`; candidates that produced live HTTP results are listed in `wordlist-live.txt`. Use this only on systems explicitly in scope for your assessment.
+
 ### Pipeline overview
 
 ```text
