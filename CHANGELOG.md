@@ -11,7 +11,8 @@
 - DNS wordlist errors no longer prevent the passive/direct-target stages from continuing.
 - The no-live-target path records Nuclei and GoWitness as skipped instead of leaving the stages absent.
 - HTML reports now display the actual run version rather than a hard-coded v2.0.1 string.
-- Added tests for bundled wordlist availability, target order, and dynamic report versions.
+- IPv6 targets are no longer truncated at the first colon during hostname parsing.
+- Added tests for bundled wordlist availability, target order, dynamic report versions, and IPv6 parsing.
 
 ## 2.0.2 — 2026-10-11
 
