@@ -4,6 +4,7 @@ from triageflow import (
     build_wordlist_candidates,
     bundled_wordlist_path,
     combine_targets,
+    discover_default_wordlist,
 )
 
 
@@ -64,6 +65,21 @@ class WordlistCandidateTests(unittest.TestCase):
                 "mail.example.test",
             ],
         )
+
+    def test_default_wordlist_prefers_first_existing_local_candidate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            missing = root / "missing.txt"
+            seclists = root / "SecLists" / "Discovery" / "DNS" / "subdomains-top1million-5000.txt"
+            seclists.parent.mkdir(parents=True)
+            seclists.write_text("www\\napi\\n", encoding="utf-8")
+            selected = discover_default_wordlist([missing, seclists])
+            self.assertEqual(selected, seclists)
+
+    def test_default_wordlist_returns_none_when_no_candidate_exists(self):
+        with tempfile.TemporaryDirectory() as temp:
+            result = discover_default_wordlist([Path(temp) / "missing.txt"])
+            self.assertIsNone(result)
 
 
 if __name__ == "__main__":
