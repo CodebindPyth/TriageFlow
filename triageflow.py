@@ -179,11 +179,99 @@ def save_report(out_dir: Path, status: dict) -> None:
     (out_dir / "README.md").write_text("\n".join(summary), encoding="utf-8")
 
 
+def prompt_choice(prompt: str, choices: dict[str, str], default: str) -> str:
+    """Ask a validated menu question; return the default when the user presses Enter."""
+    options = " / ".join(f"{key}={label}" for key, label in choices.items())
+    while True:
+        answer = input(f"{prompt} ({options}) [default {default}]: ").strip().lower()
+        answer = answer or default
+        if answer in choices:
+            return answer
+        print("Please choose one of: " + ", ".join(choices))
+
+
+def interactive_setup(args: argparse.Namespace) -> bool:
+    """Collect the minimum needed to run TriageFlow without memorizing CLI flags."""
+    print("\n" + "=" * 58)
+    print(" TriageFlow | Guided setup")
+    print("=" * 58)
+    print("Use this only for systems you own or are explicitly authorized to test.")
+    print("Press Ctrl+C at any prompt to cancel.\n")
+
+    target_mode = prompt_choice(
+        "What do you want to scan?",
+        {"1": "one domain/URL/IP", "2": "a file of targets", "q": "quit"},
+        "1",
+    )
+    if target_mode == "q":
+        print("Cancelled.")
+        return False
+
+    if target_mode == "1":
+        value = input("Target domain, URL, or IP (example: example.com): ").strip()
+        if not value:
+            print("No target entered; cancelled.")
+            return False
+        args.single_target = value
+        args.list = None
+    else:
+        value = input("Path to target file (one target per line): ").strip()
+        if not value:
+            print("No file path entered; cancelled.")
+            return False
+        args.list = value
+        args.single_target = None
+
+    if not args.wordlist:
+        bundled_wordlist = Path(__file__).resolve().parent / "wordlists" / "subdomains-small.txt"
+        wordlist_mode = prompt_choice(
+            "Subdomain wordlist?",
+            {"1": "use included small wordlist", "2": "use my own wordlist", "3": "none"},
+            "1",
+        )
+        if wordlist_mode == "1":
+            if bundled_wordlist.is_file():
+                args.wordlist = str(bundled_wordlist)
+                print(f"Using included wordlist: {bundled_wordlist}")
+            else:
+                print("Included wordlist not found; wordlist discovery will be skipped.")
+        elif wordlist_mode == "2":
+            custom_path = input("Path to your wordlist (one label per line): ").strip()
+            if custom_path:
+                args.wordlist = custom_path
+            else:
+                print("No path entered; wordlist discovery will be skipped.")
+
+    profile = prompt_choice(
+        "Choose a scan profile",
+        {
+            "1": "standard (recommended: all enabled stages)",
+            "2": "quick (skip Subfinder, Nuclei, screenshots)",
+        },
+        "1",
+    )
+    if profile == "2":
+        args.no_subdomains = True
+        args.no_nuclei = True
+        args.no_screenshots = True
+        print("Quick profile selected. httpx, software inventory, CVE lookup, and login discovery stay enabled.")
+
+    print("\nSetup complete. TriageFlow will check its tools next.")
+    print("Before any scan starts, you must still confirm authorization by typing YES.\n")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Authorized workflow: Subfinder + wordlist -> httpx -> Nuclei + GoWitness"
+        description="Beginner-friendly authorized web reconnaissance. Run without arguments for a guided setup.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "Easy start: python3 triageflow.py\n"
+            "Direct start: python3 triageflow.py -u example.com -w wordlists/subdomains-small.txt\n"
+            "Read the Greek guide: QUICKSTART_EL.md"
+        ),
     )
-    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs = parser.add_mutually_exclusive_group(required=False)
     inputs.add_argument("-l", "--list", help="Input file: one domain, host, IP, or URL per line")
     inputs.add_argument("-u", "--url", dest="single_target", help="One domain, host, IP, or URL")
     parser.add_argument("-w", "--wordlist", help="Custom subdomain wordlist, one entry per line")
@@ -197,12 +285,24 @@ def main() -> int:
     parser.add_argument("--no-login-check", action="store_true",
                         help="Skip bounded GET-only login-panel discovery")
     parser.add_argument("--max-login-hosts", type=int, default=25,
-                        help="Maximum distinct live origins checked for login panels (default: 50)")
+                        help="Maximum distinct live origins checked for login panels")
     parser.add_argument("--no-cve-lookup", action="store_true",
                         help="Skip NVD lookups for observed product/version candidates")
     parser.add_argument("--max-cve-products", type=int, default=5,
-                        help="Maximum distinct product/version pairs queried in NVD (default: 5)")
+                        help="Maximum distinct product/version pairs queried in NVD")
+    parser.add_argument("--wizard", action="store_true",
+                        help="Open the guided setup wizard")
     args = parser.parse_args()
+
+    if args.wizard and (args.list or args.single_target):
+        parser.error("--wizard cannot be combined with --url or --list")
+    if args.wizard or (not args.list and not args.single_target):
+        try:
+            if not interactive_setup(args):
+                return 1
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+            return 1
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1")
