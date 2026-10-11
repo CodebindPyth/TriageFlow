@@ -780,7 +780,8 @@ def main() -> int:
     for target in targets:
         host = hostname_of(target)
         if host and not is_ip(host) and "." in host:
-            roots.append(host)
+            root_host = host[4:] if host.startswith("www.") else host
+            roots.append(root_host)
         if "://" in target or is_ip(host) or "." not in host:
             direct.append(target)
     roots = list(dict.fromkeys(roots))
@@ -1034,13 +1035,16 @@ def main() -> int:
     status["live_url_count"] = len(live)
     if args.bruteforce_direct:
         live_hosts = {
-            hostname_of(urlparse(url).netloc or url)
+            (urlparse(url).hostname or "").lower().rstrip(".")
             for url in live
         }
+        live_candidates = sorted(set(direct_bruteforce_candidates) & live_hosts)
+        write_lines(out_dir / "wordlist-live.txt", live_candidates)
+        status["subdomain_count"] = len(set(discovered + wordlist_names + vhost_hosts + live_candidates))
         status["stages"]["wordlist_direct"] = {
             "status": "completed",
             "candidates": len(direct_bruteforce_candidates),
-            "live_urls": len(live),
+            "live_candidate_hosts": len(live_candidates),
             "rate_limit": args.bruteforce_rate,
         }
     status["asset_count"] = len(assets)
