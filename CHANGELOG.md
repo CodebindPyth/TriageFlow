@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.6 — 2026-10-11
+
+### Fixed
+- Preserve the supplied HTTP/HTTPS base URL when the target is `www.example` but wordlist discovery normalizes its root to `example`.
+- Reject scoped, link-local, multicast, and unspecified IP addresses passed as explicit DNS resolvers.
+- Added regression tests for normalized `www.` base URL selection and wordlist candidate scope/validation.
+
 ## 2.0.5 — 2026-10-11
 
 ### Added
