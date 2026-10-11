@@ -49,6 +49,17 @@ class FingerprintTests(unittest.TestCase):
         confidence, _ = _classify_cve_match(cve, "WordPress", "6.4.3")
         self.assertTrue(confidence.startswith("CPE product found"))
 
+    def test_cpe_version_range_is_checked(self):
+        cve = {"configurations": [{"nodes": [{"cpeMatch": [{
+            "criteria": "cpe:2.3:a:wordpress:wordpress:*:*:*:*:*:*:*:*",
+            "versionStartIncluding": "6.0.0",
+            "versionEndExcluding": "6.5.0",
+            "vulnerable": True,
+        }]}]}]}
+        confidence, criteria = _classify_cve_match(cve, "WordPress", "6.4.3")
+        self.assertTrue(confidence.startswith("CPE applicability supports"))
+        self.assertEqual(len(criteria), 1)
+
     def test_keyword_only_candidate_is_labelled_as_such(self):
         confidence, criteria = _classify_cve_match({"configurations": []}, "WordPress", "6.4.3")
         self.assertTrue(confidence.startswith("Keyword-only"))
