@@ -47,6 +47,29 @@ class V2ReportTests(unittest.TestCase):
             self.assertIn("MANUAL REVIEW REQUIRED", rows[0]["review_status"])
             self.assertTrue((out / "default-credentials-review.md").is_file())
 
+    def test_empty_credentials_review_distinguishes_skipped_discovery(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp)
+            write_default_credentials_review([], [], out, discovery_status="skipped")
+            markdown = (out / "default-credentials-review.md").read_text(encoding="utf-8")
+            self.assertIn("Login-panel discovery was explicitly skipped", markdown)
+            self.assertNotIn("No login panel was confirmed", markdown)
+
+            report = generate_html_report(out, {
+                "version": "2.0.10",
+                "finished_utc": "2026-10-12T00:00:00Z",
+                "target_count": 1,
+                "live_url_count": 1,
+                "subdomain_count": 0,
+                "software_fingerprint_count": 0,
+                "login_panel_count": 0,
+                "cve_candidate_count": 0,
+                "stages": {"login_panels": "skipped"},
+            })
+            html_report = report.read_text(encoding="utf-8")
+            self.assertIn("explicitly skipped by --no-login-check", html_report)
+            self.assertIn("Stage status", html_report)
+
     def test_html_report_is_generated_and_escapes_untrusted_titles(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp)
