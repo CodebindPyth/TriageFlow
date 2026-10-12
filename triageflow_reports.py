@@ -120,8 +120,9 @@ def write_default_credentials_review(
     login_panels: list[dict],
     fingerprints: list[dict],
     output_dir: Path,
+    discovery_status: str = "completed",
 ) -> list[dict]:
-    """Produce a manual checklist for default-account hygiene; never test credentials."""
+    """Produce a manual checklist; describe the scan outcome accurately and never test credentials."""
     rows = []
     for panel in login_panels:
         origin = _as_text(panel.get("origin"))
@@ -164,9 +165,25 @@ def write_default_credentials_review(
         "**Safety note:** TriageFlow does not attempt default usernames/passwords. This is a review checklist based on detected login panels and visible software fingerprints, not an authentication test.", "",
     ]
     if not rows:
+        if discovery_status == "skipped":
+            outcome = (
+                "Login-panel discovery was explicitly skipped. No conclusion can be drawn from this empty checklist."
+            )
+        elif discovery_status == "failed":
+            outcome = (
+                "Login-panel discovery failed. No conclusion about the presence or absence of login pages can be drawn; check summary.json and the stage logs."
+            )
+        elif discovery_status == "not run":
+            outcome = (
+                "Login-panel discovery did not run, usually because httpx returned no live URLs or the pipeline stopped before this stage. No conclusion can be drawn from this empty checklist."
+            )
+        else:
+            outcome = (
+                "No login panel was confirmed by the bounded GET-only discovery pass. The detector checks common authentication routes and login-like same-origin links found in returned HTML."
+            )
         md += [
-            "No login panel was confirmed by the bounded GET-only discovery pass. The detector checks common authentication routes and login-like same-origin links found in returned HTML.",
-            "This does not prove that login interfaces are absent. JavaScript-rendered, unlinked, or custom login pages may require a browser-based review; see login-discovery-summary.json for coverage details.", "",
+            outcome,
+            "An empty result does not prove that login interfaces are absent. JavaScript-rendered, unlinked, or custom login pages may require a browser-based review; see login-discovery-summary.json when available.", "",
         ]
     for index, row in enumerate(rows, start=1):
         md += [
@@ -249,6 +266,27 @@ def generate_html_report(output_dir: Path, status: dict) -> Path:
     vhosts = read_csv_rows(output_dir / "vhost-findings.csv")
     default_review = read_csv_rows(output_dir / "default-credentials-review.csv")
     login_summary = _load_json(output_dir / "login-discovery-summary.json", {})
+    login_stage = status.get("stages", {}).get("login_panels")
+    if isinstance(login_stage, dict):
+        login_stage_state = str(login_stage.get("status", "failed"))
+    elif login_stage == "skipped":
+        login_stage_state = "skipped"
+    elif not login_stage or str(login_stage).startswith(("not run", "skipped:")):
+        login_stage_state = "not run"
+    else:
+        login_stage_state = "completed"
+
+    if panels:
+        login_empty_message = "No additional login panels are displayed beyond the rows above."
+    elif login_stage_state == "skipped":
+        login_empty_message = "Login discovery was explicitly skipped by --no-login-check; no conclusion about login pages can be drawn."
+    elif login_stage_state == "failed":
+        login_empty_message = "Login discovery failed; check summary.json and stage logs. No conclusion about login pages can be drawn."
+    elif login_stage_state == "not run":
+        login_empty_message = "Login discovery did not run because there were no live URLs or the pipeline stopped before this stage."
+    else:
+        login_empty_message = "No login panel was confirmed in the bounded checks. JavaScript-only or unlinked routes may still be missed."
+
     cve_doc = _load_json(output_dir / "cve-candidates.json", {})
     cve_rows = []
     for product in cve_doc.get("results", []) if isinstance(cve_doc, dict) else []:
@@ -342,7 +380,7 @@ footer{padding:2rem;color:#9caec4;text-align:center}
         _table("Login panels", [
             ("login_url", "Login URL"), ("title", "Title"), ("status_code", "HTTP status"),
             ("evidence", "Detection evidence"),
-        ], panels, "No login panel was confirmed. Common routes and login-like same-origin links were checked; JavaScript-only or unlinked routes may still be missed. See login-discovery-summary.json for coverage details."),
+        ], panels, login_empty_message),
         _table("Default-credential hygiene checklist", [
             ("probable_product", "Probable product"), ("login_url", "Login URL"),
             ("review_status", "Status"), ("recommended_manual_checks", "General checks"),
@@ -357,6 +395,7 @@ footer{padding:2rem;color:#9caec4;text-align:center}
                stage_rows, "No stage metadata recorded."),
     ]
     login_summary_rows = [
+        {"metric": "Stage status", "value": login_stage_state},
         {"metric": "Unique origins checked", "value": login_summary.get("origins_checked", "not run")},
         {"metric": "Origins not checked due to limit", "value": login_summary.get("origins_not_checked_due_to_limit", "")},
         {"metric": "GET requests sent", "value": login_summary.get("requests_sent", "")},
