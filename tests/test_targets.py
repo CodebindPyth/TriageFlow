@@ -1,8 +1,12 @@
 import unittest
+from datetime import datetime
+from pathlib import Path
+import tempfile
 
 from triageflow import (
     base_url_for_root,
     build_wordlist_candidates,
+    create_run_output_dir,
     hostname_of,
     is_ip,
     parse_dns_resolvers,
@@ -51,6 +55,15 @@ class TargetParsingTests(unittest.TestCase):
             "nameserver 172.20.10.1\n"
         )
         self.assertEqual(resolvers, ["172.20.10.1", "2001:4860:4860::8888"])
+
+    def test_run_output_directories_do_not_collide_within_same_timestamp(self):
+        with tempfile.TemporaryDirectory() as temp:
+            same_time = datetime(2026, 10, 12, 12, 0, 0, 123456)
+            first = create_run_output_dir(temp, now=same_time)
+            second = create_run_output_dir(temp, now=same_time)
+            self.assertNotEqual(first, second)
+            self.assertTrue(first.is_dir())
+            self.assertTrue(second.is_dir())
 
 
 if __name__ == "__main__":
