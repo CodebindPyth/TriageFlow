@@ -114,6 +114,8 @@ class V2ReportTests(unittest.TestCase):
             self.assertIn("<h2>Screenshots</h2>", text)
             self.assertIn('src="gowitness/https_example_test.png"', text)
             self.assertIn("1 screenshot image(s) found", text)
+            self.assertIn("\n.screenshots{", text)
+            self.assertNotIn("\\n.screenshots{", text)
 
 
 if __name__ == "__main__":
