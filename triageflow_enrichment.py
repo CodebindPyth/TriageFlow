@@ -76,6 +76,21 @@ def _values(value) -> list[str]:
     return []
 
 
+def _fingerprint_url_key(url: str) -> str:
+    """Normalize the URL origin for de-duplication without lowercasing case-sensitive paths."""
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return url
+    return urlunsplit((
+        parsed.scheme.casefold(),
+        parsed.netloc.casefold(),
+        parsed.path,       # URL paths can be case-sensitive.
+        parsed.query,      # Keep distinct query-based resource variants separate.
+        "",                # Fragments are not sent in HTTP requests.
+    ))
+
+
 def collect_fingerprints(records: list[dict]) -> list[dict]:
     """Normalize and deduplicate product/version observations across httpx fields."""
     results: list[dict] = []
@@ -96,10 +111,9 @@ def collect_fingerprints(records: list[dict]) -> list[dict]:
                 version = ""
             if not product:
                 continue
-            # A server may expose the same technology under both tech and
-            # webserver/server. Keep one product/version row per URL and merge
-            # the evidence sources instead of repeating the same table row.
-            key = (url.casefold(), product.casefold(), version.casefold())
+            # A server may expose the same technology under multiple fields.
+            # Merge evidence for the same URL/product/version into a single row.
+            key = (_fingerprint_url_key(url), product.casefold(), version.casefold())
             existing = by_key.get(key)
             if existing is None:
                 existing = {
@@ -504,7 +518,7 @@ def detect_login_panels(
     max_hosts: int = 25,
     timeout: float = 2.5,
 ) -> list[dict]:
-    """Detect login surfaces with bounded same-origin GET-only probes; never submit credentials."""
+    """Detect multiple login surfaces with bounded same-origin GET-only probes."""
     from concurrent.futures import ThreadPoolExecutor
 
     common_paths = [
@@ -517,38 +531,57 @@ def detect_login_panels(
         "/account", "/portal", "/sso/login",
     ]
     origins: list[str] = []
+    seen_origins: set[str] = set()
     for value in live_urls:
         candidate = value if value.startswith(("http://", "https://")) else f"http://{value}"
         parsed = urlsplit(candidate)
         if not parsed.scheme or not parsed.netloc:
             continue
         origin = f"{parsed.scheme}://{parsed.netloc}"
-        if origin.casefold() not in {item.casefold() for item in origins}:
+        origin_key = origin.casefold()
+        if origin_key not in seen_origins:
+            seen_origins.add(origin_key)
             origins.append(origin)
     limit = max(1, max_hosts)
-    truncated_origins = max(0, len(origins) - limit)
+    total_unique_origins = len(origins)
+    truncated_origins = max(0, total_unique_origins - limit)
     origins = origins[:limit]
+    max_pages_per_origin = 40
+    max_panels_per_origin = 8
 
-    def probe_origin(origin: str) -> tuple[dict | None, dict]:
+    def probe_origin(origin: str) -> tuple[list[dict], dict]:
         opener = urllib.request.build_opener(_NoRedirect)
         queue = [urljoin(origin + "/", path.lstrip("/")) for path in common_paths]
-        # Probe the site's landing page first, then its likely login routes.
-        queue = [origin + "/"] + [url for url in queue if url != origin + "/"]
+        # Probe the landing page first, then the common authentication routes.
+        root_url = origin + "/"
+        queue = [root_url] + [url for url in queue if url != root_url]
         seen_urls: set[str] = set()
-        metrics = {"requests": 0, "html_pages_read": 0, "login_like_links_queued": 0}
-        max_pages_per_origin = 40
+        seen_panel_urls: set[str] = set()
+        findings: list[dict] = []
+        metrics = {
+            "requests": 0,
+            "html_pages_read": 0,
+            "login_like_links_queued": 0,
+            "panels_found": 0,
+        }
 
         while queue and metrics["requests"] < max_pages_per_origin:
             target = queue.pop(0)
             parsed_target = urlsplit(target)
-            if (parsed_target.scheme, parsed_target.netloc.casefold()) != (
-                urlsplit(origin).scheme, urlsplit(origin).netloc.casefold()
+            origin_parts = urlsplit(origin)
+            if (
+                parsed_target.scheme != origin_parts.scheme
+                or parsed_target.netloc.casefold() != origin_parts.netloc.casefold()
             ):
                 continue
-            target = urlunsplit((parsed_target.scheme, parsed_target.netloc, parsed_target.path or "/", parsed_target.query, ""))
-            if target in seen_urls:
+            target = urlunsplit((
+                parsed_target.scheme, parsed_target.netloc,
+                parsed_target.path or "/", parsed_target.query, "",
+            ))
+            target_key = target
+            if target_key in seen_urls:
                 continue
-            seen_urls.add(target)
+            seen_urls.add(target_key)
             metrics["requests"] += 1
             time.sleep(0.03)
             request = urllib.request.Request(
@@ -576,8 +609,8 @@ def detect_login_panels(
             redirect_parts = urlsplit(redirected_url) if redirected_url else None
             same_origin_redirect = bool(
                 redirect_parts
-                and redirect_parts.scheme == urlsplit(origin).scheme
-                and redirect_parts.netloc.casefold() == urlsplit(origin).netloc.casefold()
+                and redirect_parts.scheme == origin_parts.scheme
+                and redirect_parts.netloc.casefold() == origin_parts.netloc.casefold()
             )
             location_path = redirect_parts.path if redirect_parts else ""
             redirect_to_login = (
@@ -586,7 +619,6 @@ def detect_login_panels(
             )
             content_type = headers.get("Content-Type", "") if headers else ""
             if body and content_type and "html" not in content_type.lower() and not redirect_to_login:
-                # Some servers omit Content-Type, so empty values are still inspected.
                 continue
 
             metrics["html_pages_read"] += 1
@@ -599,38 +631,51 @@ def detect_login_panels(
             title = _page_title(body)
             visible_text = " ".join(parser.visible_text + [title])
             has_password = parser.password_input or bool(PASSWORD_INPUT_RE.search(body))
-            has_form = parser.has_form or bool(re.search(r"<form\b", body, re.I))
+            has_form = parser.has_form or bool(re.search(r"<form\\b", body, re.I))
             login_words = bool(LOGIN_WORD_RE.search(visible_text))
             route_hint = bool(LOGIN_PATH_RE.search(urlsplit(target).path))
-            if not (has_password or redirect_to_login or (
-                route_hint and has_form and (login_words or parser.username_input)
-            )):
-                # Follow same-origin links that look like account/login entry points.
-                dynamic_candidates = []
-                for href, label in parser.links:
-                    if not href or href.startswith(("javascript:", "mailto:", "tel:")):
-                        continue
-                    if not (LOGIN_LINK_RE.search(label) or LOGIN_PATH_RE.search(urlsplit(href).path)):
-                        continue
-                    linked_url = urljoin(target, href)
-                    parts = urlsplit(linked_url)
-                    if (
-                        parts.scheme != urlsplit(origin).scheme
-                        or parts.netloc.casefold() != urlsplit(origin).netloc.casefold()
-                        or parts.scheme not in ("http", "https")
-                    ):
-                        continue
-                    linked_url = urlunsplit((parts.scheme, parts.netloc, parts.path or "/", parts.query, ""))
-                    if linked_url not in seen_urls and linked_url not in queue:
-                        dynamic_candidates.append(linked_url)
-                if dynamic_candidates:
-                    unique_dynamic = list(dict.fromkeys(dynamic_candidates))[:12]
-                    queue[0:0] = unique_dynamic
-                    metrics["login_like_links_queued"] += len(unique_dynamic)
-                # Record a same-origin redirect target so it can be checked too.
-                if same_origin_redirect and redirect_parts:
-                    if redirected_url not in seen_urls and redirected_url not in queue:
-                        queue.insert(0, redirected_url)
+            is_login_panel = bool(
+                has_password
+                or redirect_to_login
+                or (route_hint and has_form and (login_words or parser.username_input))
+            )
+
+            # Follow only login/account-like links within the same origin, even
+            # when a page is already a login page. Never submit a form or credentials.
+            dynamic_candidates = []
+            for href, label in parser.links:
+                if not href or href.startswith(("javascript:", "mailto:", "tel:")):
+                    continue
+                href_path = urlsplit(href).path
+                if not (LOGIN_LINK_RE.search(label) or LOGIN_PATH_RE.search(href_path)):
+                    continue
+                linked_url = urljoin(target, href)
+                parts = urlsplit(linked_url)
+                if (
+                    parts.scheme != origin_parts.scheme
+                    or parts.netloc.casefold() != origin_parts.netloc.casefold()
+                    or parts.scheme not in ("http", "https")
+                ):
+                    continue
+                linked_url = urlunsplit((
+                    parts.scheme, parts.netloc, parts.path or "/", parts.query, "",
+                ))
+                if linked_url not in seen_urls and linked_url not in queue:
+                    dynamic_candidates.append(linked_url)
+            if dynamic_candidates:
+                unique_dynamic = list(dict.fromkeys(dynamic_candidates))[:12]
+                queue[0:0] = unique_dynamic
+                metrics["login_like_links_queued"] += len(unique_dynamic)
+
+            if same_origin_redirect and redirect_parts:
+                redirect_url = urlunsplit((
+                    redirect_parts.scheme, redirect_parts.netloc,
+                    redirect_parts.path or "/", redirect_parts.query, "",
+                ))
+                if redirect_url not in seen_urls and redirect_url not in queue:
+                    queue.insert(0, redirect_url)
+
+            if not is_login_panel:
                 continue
 
             evidence = []
@@ -646,31 +691,38 @@ def detect_login_panels(
             if not evidence:
                 evidence.append("login page indication")
             panel_url = redirected_url if redirect_to_login and same_origin_redirect else target
-            return ({
-                "origin": origin,
-                "login_url": panel_url,
-                "detected_from": target,
-                "status_code": status,
-                "title": title,
-                "evidence": "; ".join(evidence),
-                "credentials_submitted": False,
-            }, metrics)
+            # Several routes (for example /admin and /wp-admin) may redirect to
+            # the same sign-in page. Record each resulting URL only once.
+            if panel_url not in seen_panel_urls and len(findings) < max_panels_per_origin:
+                seen_panel_urls.add(panel_url)
+                findings.append({
+                    "origin": origin,
+                    "login_url": panel_url,
+                    "detected_from": target,
+                    "status_code": status,
+                    "title": title,
+                    "evidence": "; ".join(evidence),
+                    "credentials_submitted": False,
+                })
+                metrics["panels_found"] += 1
 
-        return None, metrics
+        return findings, metrics
 
-    # Run a small number of origins concurrently; each origin has a bounded URL budget.
+    # Limit concurrency and URL work per origin so one slow host cannot stall the run.
     with ThreadPoolExecutor(max_workers=5) as pool:
         outcomes = list(pool.map(probe_origin, origins))
-    findings = [finding for finding, _ in outcomes if finding is not None]
+    findings = [finding for origin_findings, _ in outcomes for finding in origin_findings]
     summary = {
-        "origins_available": len(live_urls),
-        "unique_origins": len(origins) + truncated_origins,
+        "input_urls": len(live_urls),
+        "unique_origins": total_unique_origins,
         "origins_checked": len(origins),
         "origins_not_checked_due_to_limit": truncated_origins,
         "requests_sent": sum(metrics["requests"] for _, metrics in outcomes),
         "html_pages_read": sum(metrics["html_pages_read"] for _, metrics in outcomes),
         "login_like_links_queued": sum(metrics["login_like_links_queued"] for _, metrics in outcomes),
         "panels_found": len(findings),
+        "max_panels_per_origin": max_panels_per_origin,
+        "max_pages_per_origin": max_pages_per_origin,
         "max_hosts": limit,
         "common_paths": common_paths,
         "method": "bounded same-origin GET-only checks; no credentials submitted",
