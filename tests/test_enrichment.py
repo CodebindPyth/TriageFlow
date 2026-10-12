@@ -47,6 +47,19 @@ class FingerprintTests(unittest.TestCase):
         self.assertEqual(openresty_rows[0]["source"], "tech; webserver; server")
         self.assertEqual(openresty_rows[0]["raw_fingerprint"], "OpenResty | openresty")
 
+    def test_fingerprint_deduplication_preserves_case_sensitive_paths(self):
+        records = [
+            {"url": "https://EXAMPLE.test/Admin", "tech": ["Drupal:10.2.0"]},
+            {"url": "https://example.test/admin", "tech": ["Drupal:10.2.0"]},
+            {"url": "https://example.test/Admin", "tech": ["Drupal:10.2.0"]},
+        ]
+        fingerprints = collect_fingerprints(records)
+        self.assertEqual(len(fingerprints), 2)
+        self.assertEqual({row["url"] for row in fingerprints}, {
+            "https://EXAMPLE.test/Admin",
+            "https://example.test/admin",
+        })
+
     def test_cpe_exact_version_is_prioritized(self):
         cve = {"configurations": [{"nodes": [{"cpeMatch": [{
             "criteria": "cpe:2.3:a:wordpress:wordpress:6.4.3:*:*:*:*:*:*:*",
