@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.9 — 2026-10-12
+
+### Fixed
+- Collect multiple distinct login panels per origin instead of stopping at the first one, with per-origin page and panel limits to keep probing bounded.
+- Fix HTML report screenshot-gallery CSS that contained literal `\\n` text rather than actual CSS rule breaks.
+- Create collision-resistant timestamped output directories so fast consecutive runs do not fail with `FileExistsError`.
+- Normalize fingerprint URL origins without lowercasing case-sensitive path names.
+- Fix the form-tag detection regex used by login discovery and add regression tests for multi-panel detection, CSS rendering, URL path case, and output directory uniqueness.
+
 ## 2.0.8 — 2026-10-11
 
 ### Fixed / Changed
