@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.9"
+VERSION = "2.0.10"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -560,10 +560,27 @@ def run_step(
 
 
 def save_report(out_dir: Path, status: dict) -> None:
-    # Always generate the manual-only default-credential checklist; this never submits credentials.
+    # Always generate the manual-only checklist, but distinguish a clean zero-result
+    # scan from a skipped, failed, or never-started login-discovery stage.
     panels = read_csv_rows(out_dir / "login-panels.csv")
     fingerprints = read_csv_rows(out_dir / "software-inventory.csv")
-    reviews = write_default_credentials_review(panels, fingerprints, out_dir)
+    login_stage = status.get("stages", {}).get("login_panels")
+    if isinstance(login_stage, dict):
+        login_discovery_status = str(login_stage.get("status", "failed"))
+    elif login_stage == "skipped" or (
+        isinstance(login_stage, str) and login_stage.startswith("skipped:")
+    ):
+        login_discovery_status = "skipped"
+    elif not login_stage or (
+        isinstance(login_stage, str)
+        and login_stage.startswith(("not run", "interrupted"))
+    ):
+        login_discovery_status = "not run"
+    else:
+        login_discovery_status = "completed"
+    reviews = write_default_credentials_review(
+        panels, fingerprints, out_dir, discovery_status=login_discovery_status
+    )
     status["default_credential_review_count"] = len(reviews)
     status["finished_utc"] = datetime.now(timezone.utc).isoformat()
     (out_dir / "summary.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
