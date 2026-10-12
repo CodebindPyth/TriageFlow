@@ -631,7 +631,7 @@ def detect_login_panels(
             title = _page_title(body)
             visible_text = " ".join(parser.visible_text + [title])
             has_password = parser.password_input or bool(PASSWORD_INPUT_RE.search(body))
-            has_form = parser.has_form or bool(re.search(r"<form\\b", body, re.I))
+            has_form = parser.has_form or bool(re.search(r"<form\b", body, re.I))
             login_words = bool(LOGIN_WORD_RE.search(visible_text))
             route_hint = bool(LOGIN_PATH_RE.search(urlsplit(target).path))
             is_login_panel = bool(
