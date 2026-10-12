@@ -27,6 +27,13 @@ class LoginDiscoveryTests(unittest.TestCase):
                         '<input name="password" type="password"></form></body></html>'
                     ).encode()
                     status = 200
+                elif self.path == "/admin/login":
+                    body = (
+                        '<html><head><title>Admin Console</title></head><body>'
+                        '<form action="/admin/session"><input name="login">'
+                        '<input type="password" name="pwd"></form></body></html>'
+                    ).encode()
+                    status = 200
                 else:
                     body = b"not found"
                     status = 404
@@ -47,15 +54,19 @@ class LoginDiscoveryTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temp:
                 output = Path(temp) / "login-panels.csv"
                 panels = detect_login_panels([origin + "/"], output, max_hosts=5, timeout=0.5)
-                self.assertEqual(len(panels), 1)
-                self.assertEqual(panels[0]["login_url"], origin + "/identity/sign-in")
-                self.assertIn("password input field", panels[0]["evidence"])
-                self.assertIs(panels[0]["credentials_submitted"], False)
+                self.assertEqual(len(panels), 2)
+                found_urls = {panel["login_url"] for panel in panels}
+                self.assertEqual(
+                    found_urls,
+                    {origin + "/identity/sign-in", origin + "/admin/login"},
+                )
+                self.assertTrue(all("password input field" in p["evidence"] for p in panels))
+                self.assertTrue(all(p["credentials_submitted"] is False for p in panels))
                 with output.open(encoding="utf-8", newline="") as stream:
                     saved = list(csv.DictReader(stream))
-                self.assertEqual(saved[0]["login_url"], origin + "/identity/sign-in")
+                self.assertEqual({row["login_url"] for row in saved}, found_urls)
                 summary = json.loads((Path(temp) / "login-discovery-summary.json").read_text())
-                self.assertEqual(summary["panels_found"], 1)
+                self.assertEqual(summary["panels_found"], 2)
                 self.assertGreaterEqual(summary["requests_sent"], 2)
         finally:
             server.shutdown()
