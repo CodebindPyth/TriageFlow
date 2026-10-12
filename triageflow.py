@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 
-VERSION = "2.0.8"
+VERSION = "2.0.9"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -148,6 +148,21 @@ def read_lines(path: Path) -> list[str]:
 
 def write_lines(path: Path, values: list[str]) -> None:
     path.write_text("".join(f"{item}\n" for item in dict.fromkeys(values)), encoding="utf-8")
+
+
+def create_run_output_dir(output_base: str | Path, now: datetime | None = None) -> Path:
+    """Create a unique timestamped run directory, even for runs started in one second."""
+    base = Path(output_base).expanduser().resolve()
+    timestamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S-%f")
+    candidate = base / timestamp
+    suffix = 1
+    while True:
+        try:
+            candidate.mkdir(parents=True, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            candidate = base / f"{timestamp}-{suffix:02d}"
+            suffix += 1
 
 
 def is_ip(value: str) -> bool:
@@ -892,8 +907,7 @@ def main() -> int:
         print("Cancelled; no scans started.")
         return 1
 
-    out_dir = Path(args.output).expanduser().resolve() / datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir.mkdir(parents=True, exist_ok=False)
+    out_dir = create_run_output_dir(args.output)
     status = {
         "version": VERSION,
         "html_report_enabled": not args.no_html_report,
