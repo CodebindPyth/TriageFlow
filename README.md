@@ -1,4 +1,4 @@
-# TriageFlow v2.0.8
+# TriageFlow v2.0.9
 
 **TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
@@ -129,7 +129,7 @@ Subfinder and the wordlist are complementary. In direct CLI mode, the program fi
 
 - **Version fingerprinting:** httpx runs with technology detection and records server/title/status metadata. Product/version strings that are exposed by the target are written to `software-inventory.csv`; many services intentionally hide or suppress precise versions, so an empty version is normal.
 - **Known-CVE candidates:** versioned products are searched through the official [NIST NVD API](https://nvd.nist.gov/developers/vulnerabilities). By default the tool queries at most five distinct product/version pairs to limit latency and API usage. Set the `NVD_API_KEY` environment variable to use an NVD API key. Review `cve-candidates.md` and `cve-candidates.json`: keyword results are leads, not proof of impact, and affected-version ranges must be checked manually.
-- **Login-panel discovery:** TriageFlow makes GET-only requests to a small set of common paths on up to 25 distinct live origins by default, then writes `login-panels.csv`. It does not submit usernames/passwords, follow redirects, or attempt authentication. Use this inventory to plan an explicitly authorized manual configuration audit.
+- **Login-panel discovery:** TriageFlow makes bounded GET-only requests to common paths and same-origin login/account links found in returned HTML on up to 25 distinct live origins by default. It can record multiple login URLs per origin (up to 8 panels and 40 page requests per origin), then writes `login-panels.csv` plus `login-discovery-summary.json`. It checks same-origin redirect targets but never sends credentials or attempts authentication. JavaScript-only or unlinked routes may still be missed.
 - **Community contributions:** see `CONTRIBUTING.md` for the fork-and-pull-request workflow.
 
 ## Installation
