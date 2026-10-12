@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.10 — 2026-10-12
+
+### Fixed
+- Default-credential checklist and HTML report now distinguish zero login findings from discovery that was skipped, failed, or never ran.
+- Login discovery stage state is passed into the report writer, preventing empty reports from implying a successful scan when no login scan occurred.
+- Clarified that report.html is a single-page report while screenshot previews reference local image files in the sibling `gowitness/` directory.
+- Added regression coverage for skipped-login reporting.
+
 ## 2.0.9 — 2026-10-12
 
 ### Fixed
