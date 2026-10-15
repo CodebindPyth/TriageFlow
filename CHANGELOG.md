@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0 — 2026-10-15
+
+### Added
+- Added an offline interactive attack-surface map (`attack-surface-map.html`) and graph JSON (`attack-surface-map.json`) linking observed roots, hosts, URLs, endpoints, technologies, login panels, and findings.
+- Added optional ProjectDiscovery Katana endpoint crawling, explicitly opt-in and bounded by depth, request-rate, and duration controls.
+- Added a link from the main HTML report to the map, plus map/crawler coverage in output summaries and the guided wizard.
+
+### Safety and limits
+- Katana crawling defaults to depth 2, 5 requests/second, and 30 seconds per target. Login discovery remains GET-only and no credential attempts are performed.
+- The map uses existing artifacts only and does not make network requests. Map relationships represent observed evidence, not proof of reachability or confirmed vulnerabilities.
+
 ## 2.0.10 — 2026-10-12
 
 ### Fixed
