@@ -19,7 +19,8 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 7. Query the NIST NVD API for candidate CVEs and classify results using CPE applicability hints where available.
 8. Check likely login panels using bounded GET requests only and create a default-credential hygiene checklist; no credentials are submitted.
 9. Optionally capture screenshots for **all live URLs**, including discovered live subdomains, with GoWitness.
-10. Optionally use Katana to crawl in-scope live URLs for additional endpoints.\n11. Generate the HTML report, interactive attack-surface map, and CSV/JSON/Markdown outputs.
+10. Optionally use Katana to crawl in-scope live URLs for additional endpoints.
+11. Generate the HTML report, interactive attack-surface map, and CSV/JSON/Markdown outputs.
 
 ## Default behavior
 
@@ -37,10 +38,18 @@ A normal run enables passive Subfinder discovery (unless `--no-subdomains` is su
 | **NVD CVE lookup** | Searches NIST NVD API 2.0 for a limited number of versioned product candidates. Results are keyword matches that require validation against the affected-version range. | `cve-candidates.json`, `cve-candidates.md` |
 | **Login-panel discovery** | Sends bounded HTTP GET requests to common login paths and records likely panels. It never attempts to authenticate or submit credentials. | `login-panels.csv` |
 | **Nuclei** | Runs template-based checks against each URL in `live.txt`, filtered by the configured severities. Findings are written as JSON Lines for later review. | `nuclei-findings.jsonl` |
-| **GoWitness** | Optional screenshots from the same `live.txt` list; discovered subdomains are included when they respond to httpx. Artifact layout can vary by GoWitness version. | `gowitness/` and `gowitness.log` |\n| **Katana (optional)** | Bounded same-origin endpoint crawling, enabled only with `--crawl-endpoints`. Defaults: depth 2, 5 requests/second, and 30 seconds per target. It does not submit credentials. | `katana-findings.jsonl`, `katana.log` |\n| **Attack surface map** | Local searchable map connecting root domains, hosts, URLs, technologies, login panels, crawl endpoints and findings. Generated from saved output; it does not contact targets. | `attack-surface-map.html`, `attack-surface-map.json` |
+| **GoWitness** | Optional screenshots from the same `live.txt` list; discovered subdomains are included when they respond to httpx. Artifact layout can vary by GoWitness version. | `gowitness/` and `gowitness.log` |
+| **Katana (optional)** | Bounded same-origin endpoint crawling, enabled only with `--crawl-endpoints`. Defaults: depth 2, 5 requests/second, and 30 seconds per target. It does not submit credentials. | `katana-findings.jsonl`, `katana.log` |
+| **Attack surface map** | Local searchable map connecting root domains, hosts, URLs, technologies, login panels, crawl endpoints and findings. Generated from saved output; it does not contact targets. | `attack-surface-map.html`, `attack-surface-map.json` |
 | **Asset inventory** | Flattens HTTP results into an easy-to-filter CSV. | `asset-inventory.csv` |
 | **Default-account hygiene review** | Associates detected login pages with visible product fingerprints and provides vendor links and manual hardening checks. It does not try usernames or passwords. | `default-credentials-review.md`, `default-credentials-review.csv` |
 | **HTML report** | Combines assets, fingerprints, CVE candidates, login pages, the default-account checklist, Nuclei findings and stage status into one local page. | `report.html` |
+
+## Interactive attack-surface map and Katana crawl
+
+The default output includes `attack-surface-map.html` and `attack-surface-map.json`. Open the HTML file locally for a searchable, zoomable relationship diagram connecting root domains, hosts, URLs, technologies, login panels, crawled endpoints, and findings. The map reads saved run artifacts and makes no network requests; the main `report.html` links to it. Use `--no-attack-map` to disable map output.
+
+Katana is deliberately opt-in because it sends additional HTTP requests. For targets that are explicitly in scope, run with `--crawl-endpoints`. Defaults are depth 2, a maximum of 5 requests per second, and 30 seconds per target. These can be adjusted with `--crawl-depth` (1-5), `--crawl-rate` (1-50), and `--crawl-duration` (5 seconds to 5 minutes, such as `30s` or `2m`). Results are written to `katana-findings.jsonl` and `katana.log`. The crawler does not submit credentials or perform login attempts.
 
 ## Direct virtual-host discovery without DNS pre-resolution
 
