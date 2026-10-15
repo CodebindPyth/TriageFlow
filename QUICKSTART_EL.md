@@ -309,7 +309,7 @@ sudo apt --fix-broken install
 
 ## 10. Προαιρετικό endpoint crawl με Katana
 
-Το Katana είναι απενεργοποιημένο εκ προεπιλογής, επειδή κάνει επιπλέον HTTP requests για να ακολουθήσει links. Ενεργοποίησέ το μόνο σε δικά σου συστήματα ή ρητά εγκεκριμένο scope:
+Το Katana είναι απενεργοποιημένο εκ προεπιλογής, επειδή κάνει επιπλέον HTTP requests για να ακολουθήσει links. Η τρέχουσα έκδοση upstream απαιτεί Go 1.26+ για εγκατάσταση· το TriageFlow ορίζει `CGO_ENABLED=1` κατά την προσπάθεια εγκατάστασης. Ενεργοποίησέ το μόνο σε δικά σου συστήματα ή ρητά εγκεκριμένο scope:
 
 ```bash
 python3 triageflow.py -u https://example.com --crawl-endpoints
