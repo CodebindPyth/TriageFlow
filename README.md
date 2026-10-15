@@ -49,7 +49,7 @@ A normal run enables passive Subfinder discovery (unless `--no-subdomains` is su
 
 The default output includes `attack-surface-map.html` and `attack-surface-map.json`. Open the HTML file locally for a searchable, zoomable relationship diagram connecting root domains, hosts, URLs, technologies, login panels, crawled endpoints, and findings. The map reads saved run artifacts and makes no network requests; the main `report.html` links to it. Use `--no-attack-map` to disable map output.
 
-Katana is deliberately opt-in because it sends additional HTTP requests. For targets that are explicitly in scope, run with `--crawl-endpoints`. Defaults are depth 2, a maximum of 5 requests per second, and 30 seconds per target. These can be adjusted with `--crawl-depth` (1-5), `--crawl-rate` (1-50), and `--crawl-duration` (5 seconds to 5 minutes, such as `30s` or `2m`). Results are written to `katana-findings.jsonl` and `katana.log`. The crawler does not submit credentials or perform login attempts.
+Katana is deliberately opt-in because it sends additional HTTP requests. The current upstream release requires Go 1.26+ to install; TriageFlow sets `CGO_ENABLED=1` for its Katana build attempt. For targets that are explicitly in scope, run with `--crawl-endpoints`. Defaults are depth 2, a maximum of 5 requests per second, and 30 seconds per target. These can be adjusted with `--crawl-depth` (1-5), `--crawl-rate` (1-50), and `--crawl-duration` (5 seconds to 5 minutes, such as `30s` or `2m`). Results are written to `katana-findings.jsonl` and `katana.log`. The crawler does not submit credentials or perform login attempts.
 
 ## Direct virtual-host discovery without DNS pre-resolution
 
