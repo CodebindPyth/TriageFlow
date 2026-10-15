@@ -101,9 +101,17 @@ def ensure_tools(required: list[str]) -> list[str]:
         if not install_path:
             continue
         print(f"[+] Installing missing tool {name} with Go...")
-        result = subprocess.run([go, "install", install_path], check=False)
+        install_env = os.environ.copy()
+        if name == "katana":
+            # Current Katana releases recommend CGO for a successful build.
+            install_env["CGO_ENABLED"] = "1"
+        result = subprocess.run(
+            [go, "install", install_path], check=False, env=install_env
+        )
         if result.returncode:
             print(f"[ERROR] Installation failed for {name}; try: go install {install_path}")
+            if name == "katana":
+                print("[ERROR] Current Katana releases require Go 1.26+; check: go version")
 
     return [name for name in required if shutil.which(name) is None]
 
