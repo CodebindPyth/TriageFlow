@@ -56,7 +56,7 @@ class V2ReportTests(unittest.TestCase):
             self.assertNotIn("No login panel was confirmed", markdown)
 
             report = generate_html_report(out, {
-                "version": "2.0.10",
+                "version": "2.1.0",
                 "finished_utc": "2026-10-12T00:00:00Z",
                 "target_count": 1,
                 "live_url_count": 1,
