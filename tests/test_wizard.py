@@ -15,6 +15,7 @@ def make_args():
         no_nuclei=False,
         no_screenshots=False,
         no_html_report=False,
+        no_attack_map=False,
     )
 
 
@@ -25,7 +26,7 @@ class WizardTests(unittest.TestCase):
 
     def test_standard_wizard_uses_bundled_wordlist_and_optional_outputs(self):
         args = make_args()
-        with patch("builtins.input", side_effect=["1", "example.com", "1", "1", "", ""]):
+        with patch("builtins.input", side_effect=["1", "example.com", "1", "1", "", "", "", ""]):
             with patch("builtins.print"):
                 self.assertTrue(interactive_setup(args))
         self.assertEqual(args.single_target, "example.com")
@@ -35,10 +36,12 @@ class WizardTests(unittest.TestCase):
         self.assertFalse(args.no_nuclei)
         self.assertFalse(args.no_screenshots)
         self.assertFalse(args.no_html_report)
+        self.assertFalse(args.crawl_endpoints)
+        self.assertFalse(args.no_attack_map)
 
     def test_quick_profile_can_skip_screenshots(self):
         args = make_args()
-        with patch("builtins.input", side_effect=["1", "example.com", "3", "2", "", ""]):
+        with patch("builtins.input", side_effect=["1", "example.com", "3", "2", "", "", "", ""]):
             with patch("builtins.print"):
                 self.assertTrue(interactive_setup(args))
         self.assertEqual(args.single_target, "example.com")
@@ -47,10 +50,12 @@ class WizardTests(unittest.TestCase):
         self.assertTrue(args.no_nuclei)
         self.assertTrue(args.no_screenshots)
         self.assertFalse(args.no_html_report)
+        self.assertFalse(args.crawl_endpoints)
+        self.assertFalse(args.no_attack_map)
 
     def test_quick_profile_can_still_enable_screenshots(self):
         args = make_args()
-        with patch("builtins.input", side_effect=["1", "example.com", "3", "2", "1", "1"]):
+        with patch("builtins.input", side_effect=["1", "example.com", "3", "2", "1", "1", "", ""]):
             with patch("builtins.print"):
                 self.assertTrue(interactive_setup(args))
         self.assertFalse(args.no_screenshots)
