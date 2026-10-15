@@ -1,4 +1,4 @@
-# TriageFlow v2.0.10
+# TriageFlow v2.1.0
 
 **TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
 
@@ -19,11 +19,11 @@ Each tool has a different job. TriageFlow handles the hand-offs between them, so
 7. Query the NIST NVD API for candidate CVEs and classify results using CPE applicability hints where available.
 8. Check likely login panels using bounded GET requests only and create a default-credential hygiene checklist; no credentials are submitted.
 9. Optionally capture screenshots for **all live URLs**, including discovered live subdomains, with GoWitness.
-10. Generate a self-contained HTML report plus CSV, JSON and Markdown outputs.
+10. Optionally use Katana to crawl in-scope live URLs for additional endpoints.\n11. Generate the HTML report, interactive attack-surface map, and CSV/JSON/Markdown outputs.
 
 ## Default behavior
 
-A normal run enables passive Subfinder discovery (unless `--no-subdomains` is supplied), HTTP service fingerprinting, login-panel discovery, NVD CVE candidate lookup, Nuclei checks, GoWitness screenshots and the HTML report. Use the matching `--no-*` switch when you intentionally want a stage disabled. The guided wizard's Quick profile is also an explicit choice to omit selected stages. Login discovery uses bounded same-origin GET requests only; it follows login-like links found in returned HTML and checks common authentication paths, but JavaScript-only or custom unlinked pages can still be missed. It never submits usernames/passwords or tests default credentials.
+A normal run enables passive Subfinder discovery (unless `--no-subdomains` is supplied), HTTP service fingerprinting, login-panel discovery, NVD CVE candidate lookup, Nuclei checks, GoWitness screenshots, HTML report, and offline attack-surface map. Katana endpoint crawling is opt-in with `--crawl-endpoints`. Use the matching `--no-*` switch when you intentionally want a stage disabled. The guided wizard's Quick profile is also an explicit choice to omit selected stages. Login discovery uses bounded same-origin GET requests only; it follows login-like links found in returned HTML and checks common authentication paths, but JavaScript-only or custom unlinked pages can still be missed. It never submits usernames/passwords or tests default credentials.
 
 ## Tools and their roles
 
@@ -37,7 +37,7 @@ A normal run enables passive Subfinder discovery (unless `--no-subdomains` is su
 | **NVD CVE lookup** | Searches NIST NVD API 2.0 for a limited number of versioned product candidates. Results are keyword matches that require validation against the affected-version range. | `cve-candidates.json`, `cve-candidates.md` |
 | **Login-panel discovery** | Sends bounded HTTP GET requests to common login paths and records likely panels. It never attempts to authenticate or submit credentials. | `login-panels.csv` |
 | **Nuclei** | Runs template-based checks against each URL in `live.txt`, filtered by the configured severities. Findings are written as JSON Lines for later review. | `nuclei-findings.jsonl` |
-| **GoWitness** | Optional screenshots from the same `live.txt` list; discovered subdomains are included when they respond to httpx. Artifact layout can vary by GoWitness version. | `gowitness/` and `gowitness.log` |
+| **GoWitness** | Optional screenshots from the same `live.txt` list; discovered subdomains are included when they respond to httpx. Artifact layout can vary by GoWitness version. | `gowitness/` and `gowitness.log` |\n| **Katana (optional)** | Bounded same-origin endpoint crawling, enabled only with `--crawl-endpoints`. Defaults: depth 2, 5 requests/second, and 30 seconds per target. It does not submit credentials. | `katana-findings.jsonl`, `katana.log` |\n| **Attack surface map** | Local searchable map connecting root domains, hosts, URLs, technologies, login panels, crawl endpoints and findings. Generated from saved output; it does not contact targets. | `attack-surface-map.html`, `attack-surface-map.json` |
 | **Asset inventory** | Flattens HTTP results into an easy-to-filter CSV. | `asset-inventory.csv` |
 | **Default-account hygiene review** | Associates detected login pages with visible product fingerprints and provides vendor links and manual hardening checks. It does not try usernames or passwords. | `default-credentials-review.md`, `default-credentials-review.csv` |
 | **HTML report** | Combines assets, fingerprints, CVE candidates, login pages, the default-account checklist, Nuclei findings and stage status into one local page. | `report.html` |
