@@ -20,7 +20,7 @@ Thanks for helping improve TriageFlow! Contributions are welcome through GitHub 
 ## Local checks
 
     python -m unittest discover -s tests -v
-    python -m py_compile triageflow.py triageflow_enrichment.py triageflow_reports.py
+    python -m py_compile triageflow.py triageflow_enrichment.py triageflow_reports.py triageflow_map.py
     python triageflow.py --help
 
 The project aims to use the Python standard library for orchestration and enrichment. If a dependency is necessary, explain why and update requirements.txt.
