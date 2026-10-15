@@ -1,6 +1,6 @@
 # TriageFlow v2.1.0
 
-**TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It connects **Subfinder**, **custom wordlist-based subdomain discovery**, **httpx**, **Nuclei**, and **GoWitness**, then enriches HTTP results with software-version inventory, NVD CVE candidates, and login-panel discovery.
+**TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It coordinates **Subfinder**, **dnsx**, **httpx**, **Nuclei**, **GoWitness**, and optional **Katana** crawling, then enriches HTTP results with software-version inventory, NVD CVE candidates, login-panel discovery, and an offline interactive attack-surface map.
 
 > **New here?** Start with the [Greek step-by-step guide](QUICKSTART_EL.md), or simply run `python3 triageflow.py` to open the guided setup wizard. You do not need to memorize command-line options.
 >
