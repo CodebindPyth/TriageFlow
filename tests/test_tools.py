@@ -8,6 +8,12 @@ import triageflow
 
 
 class EnsureToolsTests(unittest.TestCase):
+    def test_katana_install_recipe_is_registered(self):
+        self.assertEqual(
+            triageflow.GO_INSTALLS["katana"],
+            "github.com/projectdiscovery/katana/cmd/katana@latest",
+        )
+
     def test_existing_tool_in_custom_gobin_is_not_installed_again(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
