@@ -444,6 +444,16 @@ footer{padding:2rem;color:#9caec4;text-align:center}
         )
     sections.insert(-1, screenshot_section)
 
+    map_section = ""
+    map_path = output_dir / "attack-surface-map.html"
+    if status.get("attack_map_enabled", True) and map_path.is_file():
+        map_section = (
+            '<section><h2>Attack surface map</h2>'
+            '<p class="muted">Open the separate, offline interactive relationship map. '
+            '<a href="attack-surface-map.html">Open attack-surface-map.html</a> '
+            '· Structured graph data: <a href="attack-surface-map.json">attack-surface-map.json</a>.</p></section>'
+        )
+
     report_version = html.escape(str(status.get("version") or "unknown"))
     content = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -454,6 +464,7 @@ footer{padding:2rem;color:#9caec4;text-align:center}
 Login-panel discovery is GET-only. Virtual-host findings are based on HTTP Host-header responses and may not have DNS records.
 No default credentials were submitted or tested. Screenshots are displayed below when present; keep the local gowitness/ folder beside report.html.</div></header>
 <main><div class="cards">{cards}</div>
+{map_section}
 {"".join(sections)}
 </main><footer>TriageFlow v{report_version} · Authorized assessment only · Keep reports, logs and screenshots private when they contain sensitive data.</footer></body></html>
 """
