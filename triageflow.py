@@ -29,8 +29,9 @@ from triageflow_reports import (
     write_asset_inventory,
     write_default_credentials_review,
 )
+from triageflow_map import generate_attack_surface_map
 
-VERSION = "2.0.10"
+VERSION = "2.1.0"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -39,6 +40,7 @@ GO_INSTALLS = {
     "dnsx": "github.com/projectdiscovery/dnsx/cmd/dnsx@latest",
     "ffuf": "github.com/ffuf/ffuf/v2@latest",
     "gowitness": "github.com/sensepost/gowitness@latest",
+    "katana": "github.com/projectdiscovery/katana/cmd/katana@latest",
 }
 
 
@@ -582,6 +584,15 @@ def save_report(out_dir: Path, status: dict) -> None:
         panels, fingerprints, out_dir, discovery_status=login_discovery_status
     )
     status["default_credential_review_count"] = len(reviews)
+    if status.get("attack_map_enabled", True):
+        try:
+            map_info = generate_attack_surface_map(out_dir)
+            status["attack_map_node_count"] = map_info["node_count"]
+            status["attack_map_edge_count"] = map_info["edge_count"]
+            print(f"[+] Attack surface map: {map_info['html_path']}")
+        except (OSError, ValueError) as exc:
+            status["attack_map_error"] = str(exc)
+            print(f"[!] Could not create attack surface map: {exc}")
     status["finished_utc"] = datetime.now(timezone.utc).isoformat()
     (out_dir / "summary.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     summary = [
@@ -610,6 +621,8 @@ def save_report(out_dir: Path, status: dict) -> None:
         "- httpx-details.jsonl: JSONL response and technology fingerprints",
         "- asset-inventory.csv: deduplicated web asset inventory",
         "- software-inventory.csv: observed products and available versions",
+        "- attack-surface-map.html and attack-surface-map.json: offline relationship map, if enabled",
+        "- katana-findings.jsonl: in-scope endpoints found by optional Katana crawl",
         "- login-panels.csv: likely login endpoints found with GET-only checks",
         "- default-credentials-review.md/.csv: manual hardening checklist; no login attempts",
         "- cve-candidates.json and cve-candidates.md: NVD keyword search candidates",
@@ -728,6 +741,20 @@ def interactive_setup(args: argparse.Namespace) -> bool:
     )
     args.no_html_report = html_choice == "2"
 
+    crawl_choice = prompt_choice(
+        "Crawl same-origin pages for additional endpoints with Katana?",
+        {"1": "yes, bounded crawl", "2": "no, skip"},
+        "2",
+    )
+    args.crawl_endpoints = crawl_choice == "1"
+
+    map_choice = prompt_choice(
+        "Generate an offline interactive attack-surface map?",
+        {"1": "yes, recommended", "2": "no, skip map"},
+        "1",
+    )
+    args.no_attack_map = map_choice == "2"
+
     print("\nSetup complete. TriageFlow will check its tools next.")
     print("Before any scan starts, you must still confirm authorization by typing YES.\n")
     return True
@@ -790,7 +817,17 @@ def main() -> int:
     parser.add_argument("--wizard", action="store_true",
                         help="Open the guided setup wizard")
     parser.add_argument("--no-html-report", action="store_true",
-                        help="Skip the self-contained HTML report")
+                        help="Skip the single-page HTML report")
+    parser.add_argument("--no-attack-map", action="store_true",
+                        help="Skip the offline interactive attack-surface map")
+    parser.add_argument("--crawl-endpoints", action="store_true",
+                        help="Opt in to a bounded, same-origin Katana crawl for additional endpoints")
+    parser.add_argument("--crawl-depth", type=int, default=2,
+                        help="Katana crawl depth (1-5; default: 2)")
+    parser.add_argument("--crawl-rate", type=int, default=5,
+                        help="Katana maximum requests/second (1-50; default: 5)")
+    parser.add_argument("--crawl-duration", default="30s",
+                        help="Katana max per-target duration, e.g. 30s or 2m (5s-5m; default: 30s)")
     parser.add_argument("--version", action="version", version=f"TriageFlow {VERSION}")
     args = parser.parse_args()
     wizard_mode = args.wizard or (not args.list and not args.single_target)
@@ -852,6 +889,16 @@ def main() -> int:
         parser.error("--max-login-hosts must be at least 1")
     if args.max_cve_products < 1:
         parser.error("--max-cve-products must be at least 1")
+    if not 1 <= args.crawl_depth <= 5:
+        parser.error("--crawl-depth must be between 1 and 5")
+    if not 1 <= args.crawl_rate <= 50:
+        parser.error("--crawl-rate must be between 1 and 50")
+    duration_match = re.fullmatch(r"(\d+)(s|m)", args.crawl_duration.strip().lower())
+    if not duration_match:
+        parser.error("--crawl-duration must be a duration such as 30s or 2m")
+    duration_seconds = int(duration_match.group(1)) * (60 if duration_match.group(2) == "m" else 1)
+    if not 5 <= duration_seconds <= 300:
+        parser.error("--crawl-duration must be between 5s and 5m")
 
     try:
         input_path = Path(args.list).expanduser().resolve() if args.list else None
@@ -892,6 +939,8 @@ def main() -> int:
         return 2
 
     required = ["httpx"]
+    if args.crawl_endpoints:
+        required.append("katana")
     if not args.no_nuclei:
         required.append("nuclei")
     if not args.no_screenshots:
@@ -928,6 +977,7 @@ def main() -> int:
     status = {
         "version": VERSION,
         "html_report_enabled": not args.no_html_report,
+        "attack_map_enabled": not args.no_attack_map,
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "input_file": str(input_path) if input_path else None,
         "single_target": args.single_target if args.single_target else None,
@@ -938,6 +988,7 @@ def main() -> int:
         "vhost_count": 0, "stages": {}
     }
 
+    write_lines(out_dir / "root-domains.txt", roots)
     pipeline_failures: list[str] = []
     discovered: list[str] = []
     wordlist_names: list[str] = []
@@ -1150,6 +1201,9 @@ def main() -> int:
         status["stages"]["cve_lookup"] = "not run: httpx returned no live URLs"
         status["stages"]["nuclei"] = "not run: httpx returned no live URLs"
         status["stages"]["gowitness"] = "not run: httpx returned no live URLs"
+        status["stages"]["katana"] = (
+            "not run: httpx returned no live URLs" if args.crawl_endpoints else "not enabled"
+        )
         save_report(out_dir, status)
         return 1 if pipeline_failures else 0
 
@@ -1183,6 +1237,30 @@ def main() -> int:
             status["stages"]["cve_lookup"] = {"status": "failed", "error": str(exc)}
             print(f"[!] NVD CVE lookup failed: {exc}")
             failures.append("CVE lookup")
+    if not args.crawl_endpoints:
+        status["stages"]["katana"] = "not enabled (use --crawl-endpoints)"
+    else:
+        crawl_file = out_dir / "katana-findings.jsonl"
+        crawl_command = [
+            "katana", "-list", str(live_file), "-silent", "-nc", "-jsonl",
+            "-o", str(crawl_file), "-d", str(args.crawl_depth),
+            "-rl", str(args.crawl_rate), "-ct", args.crawl_duration, "-duc",
+        ]
+        rc = run_step(
+            "Katana: bounded same-origin endpoint crawl",
+            crawl_command, out_dir / "katana.log", progress_file=crawl_file,
+        )
+        crawl_records = read_httpx_jsonl(crawl_file)
+        status["katana_endpoint_count"] = len(crawl_records)
+        status["stages"]["katana"] = {
+            "status": "completed" if rc == 0 else "failed",
+            "exit_code": rc, "endpoint_records": len(crawl_records),
+            "depth": args.crawl_depth, "rate_limit": args.crawl_rate,
+            "duration": args.crawl_duration,
+        }
+        if rc:
+            failures.append("katana endpoint crawl")
+
     if args.no_nuclei:
         status["stages"]["nuclei"] = "skipped"
     else:
@@ -1229,6 +1307,11 @@ def main() -> int:
         print(f"    HTML report: {out_dir / 'report.html'}")
     print(f"    Asset inventory: {out_dir / 'asset-inventory.csv'}")
     print(f"    Default-credential review: {out_dir / 'default-credentials-review.md'}")
+    if status.get("attack_map_enabled", True):
+        print(f"    Attack surface map: {out_dir / 'attack-surface-map.html'}")
+        print(f"    Map graph JSON: {out_dir / 'attack-surface-map.json'}")
+    if args.crawl_endpoints:
+        print(f"    Katana endpoints: {out_dir / 'katana-findings.jsonl'}")
     if failures:
         print("[!] Failed stage(s): " + ", ".join(failures))
         return 1
