@@ -20,6 +20,22 @@
 
 ---
 
+## Contents
+
+- [At a glance](#at-a-glance)
+- [Architecture map](#architecture-map)
+- [Evidence-correlation map](#evidence-correlation-map)
+- [Quick start](#quick-start)
+- [Reports and output files](#reports-and-output-files)
+- [Evidence quality](#evidence-quality--no-api-key-required)
+- [Optional AI triage](#optional-ai-triage)
+- [Labeled regression checks](#labeled-regression-checks)
+- [Tool roles and network behavior](#tool-roles-and-network-behavior)
+- [Useful options](#useful-options)
+- [Safety, privacy and limitations](#safety-privacy-and-limitations)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## At a glance
 
 TriageFlow is a Python CLI orchestrator for authorized web-security reconnaissance. It connects established tools, gathers their results into consistent artifacts, and adds deterministic evidence correlation plus optional LLM-assisted triage.
