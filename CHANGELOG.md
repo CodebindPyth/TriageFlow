@@ -7,6 +7,7 @@
 - Added deterministic cross-artifact correlation between Nuclei records, asset inventory, software fingerprints, CVE candidates, and login panels.
 - Added `evidence-quality.json`, a no-API `--quality-only` CLI path, and a labeled synthetic regression fixture with machine-readable accuracy metrics.
 - Added `ai-triage.json` and `ai-triage.md` reports, with advisory-only prioritization and actionable validation/remediation notes.
+- Rewrote the project README, added two polished SVG flow diagrams, and updated the Greek guide for the v2.2 preview.
 
 ### Safety and limits
 - AI triage analyzes saved artifacts only; it cannot launch scanners or contact target systems.
