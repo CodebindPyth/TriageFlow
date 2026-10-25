@@ -30,7 +30,7 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 from triageflow_map import generate_attack_surface_map
-from triageflow_ai import analyze_saved_results, write_markdown_report
+from triageflow_ai import analyze_saved_results, build_evidence, write_markdown_report
 
 VERSION = "2.2.0"
 GO_BIN = Path.home() / "go" / "bin"
@@ -770,6 +770,32 @@ def interactive_setup(args: argparse.Namespace) -> bool:
 
 
 def main() -> int:
+    # Deterministic evidence correlation only; no API key or new scan required.
+    if "--quality-only" in sys.argv:
+        quality_parser = argparse.ArgumentParser(
+            description="Correlate existing TriageFlow evidence without running scans or calling an API."
+        )
+        quality_parser.add_argument("--quality-only", required=True, metavar="RESULTS_DIR")
+        quality_args = quality_parser.parse_args()
+        results_dir = Path(quality_args.quality_only).expanduser().resolve()
+        if not results_dir.is_dir():
+            print(f"[ERROR] Results directory does not exist: {results_dir}", file=sys.stderr)
+            return 2
+        try:
+            evidence = build_evidence(results_dir)
+            quality = evidence["quality_assessment"]
+            quality_path = results_dir / "evidence-quality.json"
+            quality_path.write_text(json.dumps(quality, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8")
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"[ERROR] Evidence correlation failed: {exc}", file=sys.stderr)
+            return 1
+        print("[+] Evidence correlation complete (advisory only).")
+        print(f"    Report: {quality_path}")
+        print(f"    Corroborated Nuclei findings: {quality['summary']['corroborated_nuclei_findings']}")
+        print(f"    Linked CPE-supported CVE candidates: {quality['summary']['linked_cpe_supported_candidates']}")
+        print("    Correlation is not proof of exploitability or a confirmed vulnerability.")
+        return 0
+
     # AI triage only: analyze already saved scan output and exit before any scanner setup.
     if "--ai-triage" in sys.argv:
         ai_parser = argparse.ArgumentParser(
