@@ -141,6 +141,25 @@ Subfinder and the wordlist are complementary. In direct CLI mode, the program fi
 - **Login-panel discovery:** TriageFlow makes bounded GET-only requests to common paths and same-origin login/account links found in returned HTML on up to 25 distinct live origins by default. It can record multiple login URLs per origin (up to 8 panels and 40 page requests per origin), then writes `login-panels.csv` plus `login-discovery-summary.json`. It checks same-origin redirect targets but never sends credentials or attempts authentication. JavaScript-only or unlinked routes may still be missed.
 - **Community contributions:** see `CONTRIBUTING.md` for the fork-and-pull-request workflow.
 
+
+
+## Optional AI-assisted triage (v2.2)
+
+TriageFlow optionally uses the OpenAI Responses API to prioritize **already saved** scan evidence. It does not start a scan, run tools, or contact targets when this mode is used. The default model is `gpt-6-astra`; select another model available to your API project with `TRIAGEFLOW_AI_MODEL` or `--ai-model`.
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+python3 triageflow.py --ai-triage ./triageflow-results/20261025-120000
+```
+
+To choose a model explicitly:
+
+```bash
+python3 triageflow.py --ai-triage ./triageflow-results/your-run --ai-model gpt-6.1-sol
+```
+
+Outputs: `ai-triage.json` and `ai-triage.md` inside the existing results directory. See [AI_TRIAGE.md](AI_TRIAGE.md) for model configuration, privacy notes, and limitations. No additional Python package is required. A ChatGPT subscription does not include API credits by default; use an API key from an OpenAI API project with access to the selected model.
+
 ## Installation
 
 ### Requirements
