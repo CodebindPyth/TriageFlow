@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 from collections import Counter, defaultdict
+from itertools import zip_longest
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -224,10 +225,14 @@ def evaluate_labeled_fixtures(fixture_path: Path) -> dict:
         actual_nuclei = [item["classification"] for item in result["nuclei_findings"]]
         expected_cves = expected.get("cve_classifications", [])
         expected_nuclei = expected.get("nuclei_classifications", [])
-        cve_total += len(expected_cves)
-        nuclei_total += len(expected_nuclei)
-        cve_hits = sum(actual == expected_value for actual, expected_value in zip(actual_cves, expected_cves))
-        nuclei_hits = sum(actual == expected_value for actual, expected_value in zip(actual_nuclei, expected_nuclei))
+        # Count unexpected/missing classifications as errors rather than silently
+        # allowing zip() to truncate the comparison.
+        cve_pairs = list(zip_longest(actual_cves, expected_cves, fillvalue=None))
+        nuclei_pairs = list(zip_longest(actual_nuclei, expected_nuclei, fillvalue=None))
+        cve_total += len(cve_pairs)
+        nuclei_total += len(nuclei_pairs)
+        cve_hits = sum(actual == expected_value for actual, expected_value in cve_pairs)
+        nuclei_hits = sum(actual == expected_value for actual, expected_value in nuclei_pairs)
         cve_correct += cve_hits
         nuclei_correct += nuclei_hits
         details.append({
