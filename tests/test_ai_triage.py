@@ -31,6 +31,14 @@ class TriageFlowAITests(unittest.TestCase):
             self.assertEqual(evidence["nuclei_findings"][0]["severity_as_reported"], "high")
             self.assertEqual(evidence["assets"][0]["hostname"], "app.example.test")
 
+    def test_build_evidence_includes_quality_assessment(self):
+        with tempfile.TemporaryDirectory() as temp:
+            evidence = build_evidence(Path(temp))
+            quality = evidence["quality_assessment"]
+            self.assertEqual(quality["schema_version"], 1)
+            self.assertEqual(quality["summary"]["asset_records"], 0)
+            self.assertIn("not prove exploitability", quality["summary"]["interpretation"])
+
     def test_extract_response_text(self):
         self.assertEqual(_extract_response_text({"output": [{"content": [
             {"type": "output_text", "text": "{\"hello\":\"world\"}"}
