@@ -158,7 +158,21 @@ To choose a model explicitly:
 python3 triageflow.py --ai-triage ./triageflow-results/your-run --ai-model gpt-6.1-sol
 ```
 
-Outputs: `ai-triage.json` and `ai-triage.md` inside the existing results directory. See [AI_TRIAGE.md](AI_TRIAGE.md) for model configuration, privacy notes, and limitations. No additional Python package is required. A ChatGPT subscription does not include API credits by default; use an API key from an OpenAI API project with access to the selected model.
+Outputs: `ai-triage.json` and `ai-triage.md` inside the existing results directory. The command also writes `evidence-quality.json` containing deterministic cross-tool correlations. See [AI_TRIAGE.md](AI_TRIAGE.md) for model configuration, privacy notes, and limitations. No additional Python package is required. A ChatGPT subscription does not include API credits by default; use an API key from an OpenAI API project with access to the selected model.
+
+To generate only the evidence correlation (no API key, no new scan):
+
+```bash
+python3 triageflow.py --quality-only ./triageflow-results/your-run
+```
+
+To run the labeled deterministic regression fixtures:
+
+```bash
+python3 triageflow_quality.py --evaluate tests/fixtures/triage_quality_cases.json
+```
+
+The included fixture labels are synthetic regression cases and do not measure real-world vulnerability-detection accuracy.
 
 ## Installation
 
