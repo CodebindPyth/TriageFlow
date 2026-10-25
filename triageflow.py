@@ -30,8 +30,9 @@ from triageflow_reports import (
     write_default_credentials_review,
 )
 from triageflow_map import generate_attack_surface_map
+from triageflow_ai import analyze_saved_results, write_markdown_report
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -769,6 +770,38 @@ def interactive_setup(args: argparse.Namespace) -> bool:
 
 
 def main() -> int:
+    # AI triage only: analyze already saved scan output and exit before any scanner setup.
+    if "--ai-triage" in sys.argv:
+        ai_parser = argparse.ArgumentParser(
+            description="Analyze an existing TriageFlow results folder with the optional OpenAI model."
+        )
+        ai_parser.add_argument("--ai-triage", required=True, metavar="RESULTS_DIR",
+                               help="Existing results directory; no new scan will run")
+        ai_parser.add_argument("--ai-model", default=None,
+                               help="OpenAI model ID (default: TRIAGEFLOW_AI_MODEL or gpt-6-astra)")
+        ai_parser.add_argument("--ai-timeout", type=float, default=60,
+                               help="OpenAI API request timeout in seconds (default: 60)")
+        ai_args = ai_parser.parse_args()
+        result_dir = Path(ai_args.ai_triage).expanduser().resolve()
+        if not result_dir.is_dir():
+            print(f"[ERROR] Results directory does not exist: {result_dir}", file=sys.stderr)
+            return 2
+        if ai_args.ai_timeout <= 0:
+            print("[ERROR] --ai-timeout must be greater than zero.", file=sys.stderr)
+            return 2
+        try:
+            report = analyze_saved_results(result_dir, model=ai_args.ai_model,
+                                           timeout=ai_args.ai_timeout)
+            markdown_path = write_markdown_report(result_dir, report)
+        except (ValueError, RuntimeError, OSError) as exc:
+            print(f"[ERROR] AI triage failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"[+] AI triage complete using {report['model']}")
+        print(f"    JSON report: {result_dir / 'ai-triage.json'}")
+        print(f"    Markdown report: {markdown_path}")
+        print("    Advisory only: verify claims against the original evidence.")
+        return 0
+
     parser = argparse.ArgumentParser(
         description="Beginner-friendly authorized web reconnaissance. Run without arguments for a guided setup.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
