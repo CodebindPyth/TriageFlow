@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.0 — 2026-10-25
+
+### Added
+- Added optional OpenAI Responses API triage for previously saved run artifacts, with schema-constrained output and local validation.
+- Added deterministic cross-artifact correlation between Nuclei records, asset inventory, software fingerprints, CVE candidates, and login panels.
+- Added `evidence-quality.json`, a no-API `--quality-only` CLI path, and a labeled synthetic regression fixture with machine-readable accuracy metrics.
+- Added `ai-triage.json` and `ai-triage.md` reports, with advisory-only prioritization and actionable validation/remediation notes.
+
+### Safety and limits
+- AI triage analyzes saved artifacts only; it cannot launch scanners or contact target systems.
+- Scanner findings and CVE candidates remain unverified. Correlation indicates that evidence shares a host/product context and is not proof of exploitability.
+- The labeled fixture measures rule-regression correctness only, not real-world vulnerability-detection or LLM accuracy. The OpenAI API key is read from the environment and is never stored in the repository.
+
 ## 2.1.0 — 2026-10-15
 
 ### Added
