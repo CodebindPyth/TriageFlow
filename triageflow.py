@@ -785,7 +785,7 @@ def main() -> int:
             evidence = build_evidence(results_dir)
             quality = evidence["quality_assessment"]
             quality_path = results_dir / "evidence-quality.json"
-            quality_path.write_text(json.dumps(quality, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8")
+            quality_path.write_text(json.dumps(quality, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         except (OSError, ValueError, TypeError) as exc:
             print(f"[ERROR] Evidence correlation failed: {exc}", file=sys.stderr)
             return 1
