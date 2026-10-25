@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1050" viewBox="0 0 1500 1050" role="img" aria-labelledby="title desc">
+  <title id="title">TriageFlow architecture and scan workflow</title>
+  <desc id="desc">A left-to-right workflow from authorized input through discovery and HTTP probing to parallel evidence collection and reports.</desc>
+  <defs>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#10233f"/><stop offset="1" stop-color="#1e4c72"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#52718c"/></marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#3578b8"/></marker>
+    <style>
+      .title{font:700 31px Inter,Segoe UI,Arial,sans-serif;fill:#fff}.subtitle{font:400 15px Inter,Segoe UI,Arial,sans-serif;fill:#d6e6f4}
+      .section{font:700 13px Inter,Segoe UI,Arial,sans-serif;letter-spacing:1.3px;fill:#617a91}
+      .head{font:700 16px Inter,Segoe UI,Arial,sans-serif;fill:#19344c}.body{font:400 13px Inter,Segoe UI,Arial,sans-serif;fill:#496175}.small{font:400 11px Inter,Segoe UI,Arial,sans-serif;fill:#5c7183}
+      .card{fill:#fff;stroke:#cad8e5;stroke-width:1.5}.blue{fill:#edf6ff;stroke:#86b6df;stroke-width:1.5}.green{fill:#edf8f4;stroke:#8ac9b2;stroke-width:1.5}.violet{fill:#f3f0ff;stroke:#b1a3e5;stroke-width:1.5}.amber{fill:#fff7e8;stroke:#e7bd70;stroke-width:1.5}
+      .line{fill:none;stroke:#52718c;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arrow)}.blueLine{fill:none;stroke:#3578b8;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arrowBlue)}.dashed{stroke-dasharray:6 6}
+    </style>
+  </defs>
+  <rect width="1500" height="1050" rx="22" fill="#f5f8fb"/>
+  <rect width="1500" height="108" rx="22" fill="url(#header)"/>
+  <rect y="86" width="1500" height="22" fill="url(#header)"/>
+  <g transform="translate(48 29)">
+    <rect x="0" y="0" width="50" height="50" rx="13" fill="#ffffff" fill-opacity=".14" stroke="#b5d1e7" stroke-opacity=".6"/>
+    <path d="M12 26 L22 16 L32 26 L22 36 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="22" cy="26" r="4" fill="#64d5b0"/>
+  </g>
+  <text x="116" y="52" class="title">TriageFlow · Architecture</text>
+  <text x="116" y="78" class="subtitle">Authorized web-security reconnaissance → evidence collection → reports</text>
+  <rect x="1200" y="33" width="245" height="38" rx="19" fill="#ffffff" fill-opacity=".12" stroke="#c5dced" stroke-opacity=".45"/>
+  <text x="1322" y="57" text-anchor="middle" class="subtitle">Bounded · Observable · Reportable</text>
+
+  <text x="45" y="145" class="section">01 · INPUT &amp; DISCOVERY</text>
+  <rect x="45" y="170" width="210" height="140" rx="14" class="card"/>
+  <circle cx="72" cy="199" r="13" fill="#e5f0f8"/><path d="M66 199h12M72 193v12" stroke="#3578b8" stroke-width="2" stroke-linecap="round"/>
+  <text x="94" y="204" class="head">Target input</text>
+  <text x="65" y="235" class="body">Single URL / domain / IP</text>
+  <text x="65" y="256" class="body">or a newline-separated file</text>
+  <text x="65" y="286" class="small">Normalize · deduplicate</text>
+
+  <path d="M255 240 H292" class="line"/>
+  <rect x="300" y="170" width="210" height="140" rx="14" class="blue"/>
+  <circle cx="327" cy="199" r="13" fill="#d8ebfb"/><path d="M320 199l5 5 9-11" fill="none" stroke="#3578b8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="349" y="204" class="head">Scope gate</text>
+  <text x="320" y="235" class="body">User confirms authorization</text>
+  <text x="320" y="256" class="body">before active stages run</text>
+  <text x="320" y="286" class="small">No scope bypass implied</text>
+
+  <path d="M510 240 H545" class="line"/>
+  <rect x="553" y="155" width="410" height="175" rx="16" fill="#edf3f8" stroke="#c2d2df" stroke-width="1.5"/>
+  <text x="575" y="181" class="head">Discovery engines</text>
+  <rect x="575" y="197" width="170" height="50" rx="10" class="card"/>
+  <text x="660" y="217" text-anchor="middle" class="head" style="font-size:14px">Subfinder</text>
+  <text x="660" y="234" text-anchor="middle" class="small">Passive subdomains</text>
+  <rect x="765" y="197" width="175" height="50" rx="10" class="card"/>
+  <text x="852" y="217" text-anchor="middle" class="head" style="font-size:14px">dnsx + wordlist</text>
+  <text x="852" y="234" text-anchor="middle" class="small">Candidate resolution</text>
+  <rect x="575" y="261" width="170" height="48" rx="10" class="card"/>
+  <text x="660" y="281" text-anchor="middle" class="head" style="font-size:14px">ffuf (optional)</text>
+  <text x="660" y="297" text-anchor="middle" class="small">Virtual-host discovery</text>
+  <rect x="765" y="261" width="175" height="48" rx="10" class="card"/>
+  <text x="852" y="281" text-anchor="middle" class="head" style="font-size:14px">Target merge</text>
+  <text x="852" y="297" text-anchor="middle" class="small">Deduplicate + scope</text>
+
+  <path d="M963 240 H998" class="line"/>
+  <rect x="1006" y="170" width="200" height="140" rx="14" class="blue"/>
+  <circle cx="1033" cy="199" r="13" fill="#d8ebfb"/><circle cx="1033" cy="199" r="6" fill="none" stroke="#3578b8" stroke-width="2"/><path d="M1042 208l5 5" stroke="#3578b8" stroke-width="2" stroke-linecap="round"/>
+  <text x="1055" y="204" class="head">httpx</text>
+  <text x="1026" y="235" class="body">Live-service probing</text>
+  <text x="1026" y="256" class="body">Titles · status · server</text>
+  <text x="1026" y="277" class="body">Technology fingerprints</text>
+  <text x="1026" y="296" class="small">JSONL + live URL list</text>
+
+  <path d="M1206 240 H1235 V393 H750 V420" class="blueLine"/>
+  <rect x="505" y="420" width="490" height="82" rx="15" class="blue"/>
+  <text x="750" y="450" text-anchor="middle" class="head" style="font-size:18px">Observed evidence bundle</text>
+  <text x="750" y="474" text-anchor="middle" class="body">live.txt · httpx-details.jsonl · normalized assets &amp; fingerprints</text>
+
+  <text x="45" y="548" class="section">02 · PARALLEL ANALYSIS</text>
+  <path d="M750 502 V530 H170 V568" class="line"/>
+  <path d="M750 530 H460 V568" class="line"/>
+  <path d="M750 530 V568" class="line"/>
+  <path d="M750 530 H1040 V568" class="line"/>
+  <path d="M750 530 H1330 V568" class="line"/>
+
+  <rect x="45" y="568" width="250" height="118" rx="14" class="green"/>
+  <text x="170" y="596" text-anchor="middle" class="head">Asset &amp; software inventory</text>
+  <text x="170" y="620" text-anchor="middle" class="body">Asset rows + product versions</text>
+  <text x="170" y="645" text-anchor="middle" class="small">asset-inventory.csv</text>
+  <text x="170" y="662" text-anchor="middle" class="small">software-inventory.csv</text>
+
+  <rect x="335" y="568" width="250" height="118" rx="14" class="amber"/>
+  <text x="460" y="596" text-anchor="middle" class="head">NVD CVE candidates</text>
+  <text x="460" y="620" text-anchor="middle" class="body">CPE hints + version checks</text>
+  <text x="460" y="645" text-anchor="middle" class="small">Candidate leads, not verdicts</text>
+  <text x="460" y="662" text-anchor="middle" class="small">cve-candidates.json</text>
+
+  <rect x="625" y="568" width="250" height="118" rx="14" class="violet"/>
+  <text x="750" y="596" text-anchor="middle" class="head">Nuclei checks</text>
+  <text x="750" y="620" text-anchor="middle" class="body">Template-based observations</text>
+  <text x="750" y="645" text-anchor="middle" class="small">nuclei-findings.jsonl</text>
+  <text x="750" y="662" text-anchor="middle" class="small">Scanner claims stay unverified</text>
+
+  <rect x="915" y="568" width="250" height="118" rx="14" class="card"/>
+  <text x="1040" y="596" text-anchor="middle" class="head">Login-panel discovery</text>
+  <text x="1040" y="620" text-anchor="middle" class="body">Bounded same-origin GETs</text>
+  <text x="1040" y="645" text-anchor="middle" class="small">No credential submissions</text>
+  <text x="1040" y="662" text-anchor="middle" class="small">login-panels.csv</text>
+
+  <rect x="1205" y="568" width="250" height="118" rx="14" class="card"/>
+  <text x="1330" y="596" text-anchor="middle" class="head">Optional extras</text>
+  <text x="1330" y="620" text-anchor="middle" class="body">GoWitness screenshots</text>
+  <text x="1330" y="645" text-anchor="middle" class="small">Katana same-origin crawl</text>
+  <text x="1330" y="662" text-anchor="middle" class="small">Crawl is opt-in</text>
+
+  <path d="M170 686 V728 H750" class="line"/>
+  <path d="M460 686 V728" class="line"/>
+  <path d="M750 686 V728" class="line"/>
+  <path d="M1040 686 V728 H750" class="line"/>
+  <path d="M1330 686 V728 H750" class="line"/>
+  <path d="M750 728 V753" class="blueLine"/>
+
+  <rect x="335" y="753" width="830" height="82" rx="15" fill="#eaf1f7" stroke="#9fb6ca" stroke-width="1.5"/>
+  <text x="750" y="783" text-anchor="middle" class="head" style="font-size:18px">Reporting &amp; evidence correlation</text>
+  <text x="750" y="808" text-anchor="middle" class="body">Summary JSON · HTML report · offline attack-surface map · deterministic quality report</text>
+
+  <path d="M750 835 V866 H375 V888" class="blueLine"/>
+  <path d="M750 866 H1125 V888" class="blueLine"/>
+  <rect x="135" y="888" width="480" height="88" rx="14" class="card"/>
+  <text x="375" y="917" text-anchor="middle" class="head">Reviewable artifacts</text>
+  <text x="375" y="941" text-anchor="middle" class="body">CSV · JSON · JSONL · Markdown · local HTML</text>
+  <text x="375" y="960" text-anchor="middle" class="small">Evidence-first, reproducible output</text>
+  <rect x="885" y="888" width="480" height="88" rx="14" class="violet"/>
+  <text x="1125" y="917" text-anchor="middle" class="head">Optional AI triage</text>
+  <text x="1125" y="941" text-anchor="middle" class="body">Saved evidence → structured prioritization</text>
+  <text x="1125" y="960" text-anchor="middle" class="small">API key required · no tool execution</text>
+  <text x="45" y="1022" class="small">TriageFlow 2.2 preview · Correlation and scanner output are not proof of exploitability. Use only within authorized scope.</text>
+</svg>
