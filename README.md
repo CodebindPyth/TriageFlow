@@ -1,298 +1,234 @@
-# TriageFlow v2.1.0
+# TriageFlow 2.2.0 · Security Reconnaissance & Evidence Triage
 
-**TriageFlow v2** is a beginner-friendly Python command-line orchestrator for authorized web-security reconnaissance. It coordinates **Subfinder**, **dnsx**, **httpx**, **Nuclei**, **GoWitness**, and optional **Katana** crawling, then enriches HTTP results with software-version inventory, NVD CVE candidates, login-panel discovery, and an offline interactive attack-surface map.
+<p align="center">
+  <strong>A practical, evidence-first workflow for authorized web-security assessments.</strong><br>
+  Discover assets, collect observations, correlate evidence, and produce reports you can review.
+</p>
 
-> **New here?** Start with the [Greek step-by-step guide](QUICKSTART_EL.md), or simply run `python3 triageflow.py` to open the guided setup wizard. You do not need to memorize command-line options.
->
-> **Authorization only:** Run this tool only against systems you own or targets explicitly included in your written authorization, lab, or bug-bounty scope. The confirmation prompt is an operational reminder, not a substitute for permission.
+<p align="center">
+  <a href="https://github.com/CodebindPyth/TriageFlow/actions/workflows/tests.yml"><img src="https://github.com/CodebindPyth/TriageFlow/actions/workflows/tests.yml/badge.svg?branch=feat%2Fai-triage-openai" alt="CI tests"></a>
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/License-MIT-2ea44f.svg" alt="MIT License">
+  <img src="https://img.shields.io/badge/AI-Optional-8b5cf6" alt="AI optional">
+</p>
 
-## Why TriageFlow?
+> **Preview note:** Version 2.2.0 and its AI/evidence-quality features are currently on [PR #1](https://github.com/CodebindPyth/TriageFlow/pull/1), not yet merged into `main`. To try those features, use the preview-branch install command below.
 
-Each tool has a different job. TriageFlow handles the hand-offs between them, so you do not have to manually copy output from one command into the next:
+**New to TriageFlow?** Follow the [Greek Quick Start Guide](QUICKSTART_EL.md).  
+**Want the AI details?** See [AI_TRIAGE.md](AI_TRIAGE.md).  
+**Want the change history?** Read [CHANGELOG.md](CHANGELOG.md).
 
-1. Accept one target (`-u`) or a file of targets (`-l`).
-2. Normalize and deduplicate supplied entries, then identify DNS root domains suitable for subdomain discovery.
-3. Optionally run Subfinder and/or build candidate subdomains from a custom wordlist (`-w`).
-4. Combine direct targets, root domains, and discovered names into one deduplicated list.
-5. Run httpx with JSON output, technology detection, server headers, titles, status codes, and asset details.
-6. Build CSV asset/software inventories.
-7. Query the NIST NVD API for candidate CVEs and classify results using CPE applicability hints where available.
-8. Check likely login panels using bounded GET requests only and create a default-credential hygiene checklist; no credentials are submitted.
-9. Optionally capture screenshots for **all live URLs**, including discovered live subdomains, with GoWitness.
-10. Optionally use Katana to crawl in-scope live URLs for additional endpoints.
-11. Generate the HTML report, interactive attack-surface map, and CSV/JSON/Markdown outputs.
+---
 
-## Default behavior
+## Contents
 
-A normal run enables passive Subfinder discovery (unless `--no-subdomains` is supplied), HTTP service fingerprinting, login-panel discovery, NVD CVE candidate lookup, Nuclei checks, GoWitness screenshots, HTML report, and offline attack-surface map. Katana endpoint crawling is opt-in with `--crawl-endpoints`. Use the matching `--no-*` switch when you intentionally want a stage disabled. The guided wizard's Quick profile is also an explicit choice to omit selected stages. Login discovery uses bounded same-origin GET requests only; it follows login-like links found in returned HTML and checks common authentication paths, but JavaScript-only or custom unlinked pages can still be missed. It never submits usernames/passwords or tests default credentials.
+- [At a glance](#at-a-glance)
+- [Architecture map](#architecture-map)
+- [Evidence-correlation map](#evidence-correlation-map)
+- [Quick start](#quick-start)
+- [Reports and output files](#reports-and-output-files)
+- [Evidence quality](#evidence-quality--no-api-key-required)
+- [Optional AI triage](#optional-ai-triage)
+- [Labeled regression checks](#labeled-regression-checks)
+- [Tool roles and network behavior](#tool-roles-and-network-behavior)
+- [Useful options](#useful-options)
+- [Safety, privacy and limitations](#safety-privacy-and-limitations)
+- [Contributing](#contributing)
+- [License](#license)
 
-## Tools and their roles
+## At a glance
 
-| Tool | Purpose in this workflow | Output/use |
-|---|---|---|
-| **Subfinder** | Passive subdomain enumeration for supplied root domains. `--subfinder-all` asks it to use all configured sources; this may be slower and some sources may need API keys. | `subdomains.txt` |
-| **Custom wordlist (`-w`)** | Builds in-scope hostname candidates and resolves them in parallel using ProjectDiscovery `dnsx` with a short per-query timeout. It reads DNS servers from `/etc/resolv.conf` by default and checks the system hosts file. Full hostnames from another domain are rejected. | `wordlist-candidates.txt`, `wordlist-resolved.txt`, `dnsx.log` |
-| **Virtual-host fallback (ffuf)** | `--vhost-fuzz` runs alongside DNS discovery. For direct Host-header discovery without first resolving candidates through `dnsx`, use the standalone `vhost_direct.py` entry point described below. | `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt`, `ffuf-vhost-*.log` |
-| **httpx (ProjectDiscovery)** | Probes targets and records response status, title, server header, and detected technologies as JSONL. This is the ProjectDiscovery CLI tool, not the unrelated Python HTTPX library. | `live.txt`, `httpx-details.jsonl` |
-| **Software inventory** | Extracts product/version observations visible to httpx. | `software-inventory.csv` |
-| **NVD CVE lookup** | Searches NIST NVD API 2.0 for a limited number of versioned product candidates. Results are keyword matches that require validation against the affected-version range. | `cve-candidates.json`, `cve-candidates.md` |
-| **Login-panel discovery** | Sends bounded HTTP GET requests to common login paths and records likely panels. It never attempts to authenticate or submit credentials. | `login-panels.csv` |
-| **Nuclei** | Runs template-based checks against each URL in `live.txt`, filtered by the configured severities. Findings are written as JSON Lines for later review. | `nuclei-findings.jsonl` |
-| **GoWitness** | Optional screenshots from the same `live.txt` list; discovered subdomains are included when they respond to httpx. Artifact layout can vary by GoWitness version. | `gowitness/` and `gowitness.log` |
-| **Katana (optional)** | Bounded same-origin endpoint crawling, enabled only with `--crawl-endpoints`. Defaults: depth 2, 5 requests/second, and 30 seconds per target. It does not submit credentials. | `katana-findings.jsonl`, `katana.log` |
-| **Attack surface map** | Local searchable map connecting root domains, hosts, URLs, technologies, login panels, crawl endpoints and findings. Generated from saved output; it does not contact targets. | `attack-surface-map.html`, `attack-surface-map.json` |
-| **Asset inventory** | Flattens HTTP results into an easy-to-filter CSV. | `asset-inventory.csv` |
-| **Default-account hygiene review** | Associates detected login pages with visible product fingerprints and provides vendor links and manual hardening checks. It does not try usernames or passwords. | `default-credentials-review.md`, `default-credentials-review.csv` |
-| **HTML report** | Combines assets, fingerprints, CVE candidates, login pages, the default-account checklist, Nuclei findings and stage status into one local page. | `report.html` |
+TriageFlow is a Python CLI orchestrator for authorized web-security reconnaissance. It connects established tools, gathers their results into consistent artifacts, and adds deterministic evidence correlation plus optional LLM-assisted triage.
 
-## Interactive attack-surface map and Katana crawl
+- **Discover:** Subfinder, dnsx/wordlists, optional ffuf virtual-host discovery.
+- **Observe:** ProjectDiscovery httpx identifies live web services and visible technology fingerprints.
+- **Enrich:** asset/software inventories, NIST NVD CVE candidates and bounded login-panel discovery.
+- **Assess:** Nuclei template results and optional GoWitness screenshots / Katana endpoint crawling.
+- **Understand:** an offline interactive attack-surface map and a single-page HTML report.
+- **Correlate:** connect observations by host and product/version; flag orphaned evidence, duplicate findings and version conflicts.
+- **Prioritize (optional):** use the OpenAI Responses API to turn saved evidence into a structured review plan.
 
-The default output includes `attack-surface-map.html` and `attack-surface-map.json`. Open the HTML file locally for a searchable, zoomable relationship diagram connecting root domains, hosts, URLs, technologies, login panels, crawled endpoints, and findings. The map reads saved run artifacts and makes no network requests; the main `report.html` links to it. Use `--no-attack-map` to disable map output.
+TriageFlow does **not** attempt logins, submit credentials, or treat a product/CVE match as proof of exploitability. It is a workflow and triage aid, not a replacement for manual validation.
 
-Katana is deliberately opt-in because it sends additional HTTP requests. The current upstream release requires Go 1.26+ to install; TriageFlow sets `CGO_ENABLED=1` for its Katana build attempt. For targets that are explicitly in scope, run with `--crawl-endpoints`. Defaults are depth 2, a maximum of 5 requests per second, and 30 seconds per target. These can be adjusted with `--crawl-depth` (1-5), `--crawl-rate` (1-50), and `--crawl-duration` (5 seconds to 5 minutes, such as `30s` or `2m`). Results are written to `katana-findings.jsonl` and `katana.log`. The crawler does not submit credentials or perform login attempts.
+## Architecture map
 
-## Direct virtual-host discovery without DNS pre-resolution
+The diagram below shows how targets move through discovery, HTTP observation, parallel analysis and reporting.
 
-If you want to test virtual hosts directly, without first sending every candidate through dnsx, use the standalone `vhost_direct.py` entry point. It sends requests to the supplied base URL and varies only the HTTP Host header, using ffuf. It requires ffuf, but not dnsx or Subfinder.
+![TriageFlow architecture map](docs/architecture.svg)
 
-```bash
-python3 vhost_direct.py \
-  -u http://inlanefreight.local/ \
-  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-110000.txt \
-  --rate 100 \
-  --max-time 120
-```
+## Evidence-correlation map
 
-Use a wordlist of single labels (for example, admin, dev, portal). The base URL itself must be reachable from Kali; the script asks you to confirm authorization before sending requests. Results are saved in a timestamped directory under `triageflow-results/`: `vhost-findings.csv`, `vhost-findings.json`, `vhost-subdomains.txt`, and `ffuf-vhost.log`. These results are separate from the main `triageflow.py` pipeline's `live.txt`.
+The quality layer links artifacts before the optional model is asked to prioritize them. Its classifications describe the strength of the *evidence link*, not whether a system is exploitable.
 
-## Direct wordlist brute-force in the main TriageFlow pipeline
+![Evidence correlation and AI triage map](docs/ai-evidence-map.svg)
 
-Use `--bruteforce-direct` when you want the **normal `triageflow.py` pipeline** to queue wordlist-generated hostname candidates directly for `httpx`, without the separate `dnsx` pre-resolution stage. Subfinder remains enabled unless you explicitly pass `--no-subdomains`. `httpx` still has to resolve hostnames internally to connect to web services, so this bypasses only the standalone `dnsx` pass, not the DNS resolution needed for HTTP connections.
+## Quick start
+
+### 1. Get the v2.2 preview branch
 
 ```bash
-python3 triageflow.py \
-  -u http://inlanefreight.local/ \
-  -w /home/kali/SecLists/Discovery/DNS/subdomains-top1million-5000.txt \
-  --bruteforce-direct \
-  --bruteforce-rate 10
-```
-
-The direct mode skips the standalone `dnsx` pre-resolution stage, feeds generated candidates to `httpx`, and still runs Subfinder unless `--no-subdomains` is supplied. By default, login-panel discovery, NVD CVE lookup, Nuclei and GoWitness screenshots are enabled. Each can be deliberately disabled with its corresponding `--no-login-check`, `--no-cve-lookup`, `--no-nuclei` or `--no-screenshots` option. The request-rate limit defaults to 50 requests per second and can be adjusted with `--bruteforce-rate`. Candidate names are recorded in `wordlist-candidates.txt`; candidates that produced live HTTP results are listed in `wordlist-live.txt`. The HTML report displays screenshot images from its sibling `gowitness/` folder, and the report must stay with that folder. Use this only on systems explicitly in scope for your assessment.
-
-Long-running stages now print a heartbeat every 10 seconds. During `httpx`, TriageFlow also reports how many JSONL result records have been saved so far. This is progress feedback, not a count of every attempted request: names that do not respond will not add a result record. A very large candidate list can still take a long time; for example, 100,000 candidates at 50 requests/second has a theoretical rate-limit floor of about 33 minutes, before DNS and connection delays.
-
-### Pipeline overview
-
-```text
--u target  OR  -l targets.txt
-          |
-          v
-  Root domains + direct targets
-          |
-          v
-  Custom wordlist DNS (dnsx)
-  SecLists if installed, else bundled
-          |
-          v
-  Passive Subfinder (unless skipped)
-          |
-          v
-  Deduplicate: direct + roots + wordlist + passive
-          |
-          v
-              httpx
-                |
-       live URLs + JSONL
-                |
-       +--------+---------+
-       |        |         |
-       v        v         v
-   Inventory  NVD CVEs  Login panels
-       |        |         |
-       +--------+---------+
-                |
-          +-----+-----+
-          v           v
-        Nuclei     GoWitness
-       findings    screenshots
-          +-----------+
-                |
-          Logs + summary
-```
-
-Subfinder and the wordlist are complementary. In direct CLI mode, the program first looks for a local SecLists DNS wordlist and falls back to the bundled starter list; the wizard lets you choose whether to use the detected list. `--no-subdomains` skips Subfinder but still uses the wordlist, while `--no-wordlist` disables automatic wordlist selection. DNS resolution is only a quick filter, not proof that a hostname hosts a web service—httpx makes that determination next.
-
-## What is new in v2?
-
-- **Wordlist-first discovery:** direct CLI runs automatically look for an installed SecLists `Discovery/DNS/subdomains-top1million-5000.txt`; if none is found, they use `wordlists/subdomains-small.txt` when `-w` is omitted. DNS checks for those wordlist candidates run before Subfinder. Resolved wordlist names are placed in `all-targets.txt` before passive Subfinder results and are passed to httpx, then to later stages if they respond. Use `-w /path/to/wordlist.txt` for a larger list, or `--no-wordlist` to skip automatic wordlist selection. DNS checks use ProjectDiscovery `dnsx` concurrently (100 threads, one attempt, 2-second per-query timeout) with progress messages and wildcard filtering. The selected path and number of input entries are printed before DNS begins; scoped/link-local IPv6 nameservers are excluded from `/etc/resolv.conf`.
-- **Private/lab DNS:** usable resolver addresses are read from `/etc/resolv.conf`; scoped/link-local IPv6 entries such as `fe80::1%eth1` are skipped. The system hosts file is also checked. For an unusual lab setup, use `--dns-resolvers 10.0.0.1` with the DNS server supplied by the lab.
-- **Virtual-host fallback:** DNS enumeration cannot discover a web virtual host that has no DNS record. If both Subfinder and wordlist DNS return no subdomains, TriageFlow asks whether you want ffuf to test HTTP `Host` headers using the same wordlist. Confirm only if this is an authorized target. Add `--vhost-fuzz` to run this stage explicitly regardless of DNS results. Vhost-only names may not be DNS-resolvable and therefore are not automatically included in `live.txt` or GoWitness screenshots.
-- **Guided screenshot choice:** during interactive setup, choose whether GoWitness should capture screenshots. In the Standard profile screenshots default to yes; in Quick they default to no, but you can change that answer.
-- **Single HTML report:** `report.html` is generated by default and can be opened locally in a browser. It contains an overview and tables for assets, software versions, CVE candidates, login panels, manual credential hygiene review, Nuclei findings, and stage status.
-- **Asset inventory:** `asset-inventory.csv` includes observed URL, hostname, IPs when available, status, title, server, technologies, CNAME and CDN fields when supplied by httpx.
-- **Better CVE triage:** each CVE candidate gets a per-result label. Where NVD CPE applicability data is present, TriageFlow checks whether the observed product/version fits the advertised criteria. These checks are heuristic hints, not a final version-range verdict; vendor advisories remain authoritative.
-- **Default-account hygiene report:** found login panels are paired with recognizable software fingerprints where possible and produce a vendor-guidance checklist. TriageFlow does **not** submit default credentials or run credential spraying. Use an approved, controlled configuration audit to validate authentication settings.
-- **Versioning and tests:** `python3 triageflow.py --version` reports the version; unit tests cover fingerprinting, CPE triage labels, wizard options, reports, and virtual-host output files.
-
-## Enrichment features
-
-- **Version fingerprinting:** httpx runs with technology detection and records server/title/status metadata. Product/version strings that are exposed by the target are written to `software-inventory.csv`; many services intentionally hide or suppress precise versions, so an empty version is normal.
-- **Known-CVE candidates:** versioned products are searched through the official [NIST NVD API](https://nvd.nist.gov/developers/vulnerabilities). By default the tool queries at most five distinct product/version pairs to limit latency and API usage. Set the `NVD_API_KEY` environment variable to use an NVD API key. Review `cve-candidates.md` and `cve-candidates.json`: keyword results are leads, not proof of impact, and affected-version ranges must be checked manually.
-- **Login-panel discovery:** TriageFlow makes bounded GET-only requests to common paths and same-origin login/account links found in returned HTML on up to 25 distinct live origins by default. It can record multiple login URLs per origin (up to 8 panels and 40 page requests per origin), then writes `login-panels.csv` plus `login-discovery-summary.json`. It checks same-origin redirect targets but never sends credentials or attempts authentication. JavaScript-only or unlinked routes may still be missed.
-- **Community contributions:** see `CONTRIBUTING.md` for the fork-and-pull-request workflow.
-
-## Installation
-
-### Requirements
-
-- Python 3.10+
-- Go (needed only if you want TriageFlow to attempt automatic installation of missing Go-based tools)
-- Chrome or Chromium when screenshots are enabled, plus the applicable GoWitness CLI
-- ProjectDiscovery `httpx`, `nuclei`, `subfinder`, and `gowitness`, depending on which stages you want to run
-- ProjectDiscovery `dnsx` when wordlist discovery is enabled (automatic local SecLists detection, falling back to the bundled list)
-- `ffuf` when you enable virtual-host discovery or accept its fallback prompt
-- Network/DNS access appropriate to your authorized environment
-
-TriageFlow checks for required executables in `PATH`, `~/go/bin`, and the directories reported by `go env GOBIN`/`GOPATH`. It skips installation when a tool already exists in one of those locations, and attempts `go install` only for tools that are genuinely missing. This avoids repeated downloads when Go uses a custom binary directory. Tools that remain unavailable are reported before the scan starts. If screenshots are enabled but Chrome/Chromium cannot be found on `PATH`, it prints a warning before the scan starts. Ensure `~/go/bin` is on `PATH` for later terminal sessions. Automatic installation can fail because of network restrictions, Go-version incompatibilities, or OS package-manager problems; inspect the messages and logs rather than assuming installation succeeded.
-
-### Clone and start (recommended for beginners)
-
-```bash
-git clone https://github.com/CodebindPyth/TriageFlow.git
+git clone --branch feat/ai-triage-openai --single-branch https://github.com/CodebindPyth/TriageFlow.git
 cd TriageFlow
 python3 triageflow.py
 ```
 
-Running the program **without arguments** opens the guided wizard. It asks whether you want to scan one target or a file, which wordlist to use, and whether you want the Standard or Quick profile. Before any scan starts, it still requires the authorization confirmation.
-
-To see every CLI option without starting a scan:
+The guided wizard helps you choose a target, wordlist and scan profile. To inspect options without starting a scan:
 
 ```bash
-python3 triageflow.py --version
 python3 triageflow.py --help
 ```
 
-You can explicitly launch the same wizard with `python3 triageflow.py --wizard`. See [QUICKSTART_EL.md](QUICKSTART_EL.md) for explanations in Greek, output files, troubleshooting, and example commands.
+Requirements: Python 3.10 or newer. TriageFlow uses the Python standard library for its core logic; external scanners such as Subfinder, dnsx, httpx, Nuclei and GoWitness are separate tools. The CLI checks for required tools and may install missing Go-based tools when Go is available.
 
-The Python code uses standard-library modules only; Go-based recon tools are installed separately.
+### 2. Run a command-line assessment
 
-## Usage
-
-**Beginner path:** run `python3 triageflow.py` with no arguments and follow the prompts. Choose **Standard** for all enabled stages or **Quick** to skip Subfinder, Nuclei, and screenshots. The reports now distinguish a true zero-result login scan from a stage that was skipped, failed, or never ran.
-
-For direct CLI use:
+Only replace the example with a domain, URL or IP that you own or have explicit written permission to assess.
 
 ```bash
-# One authorized domain; a local SecLists wordlist is preferred, otherwise the bundled list runs first
-python3 triageflow.py -u example.com
+# One authorized target
+python3 triageflow.py -u https://your-authorized-target.example
 
-# One authorized domain, ask Subfinder to use all configured sources
-python3 triageflow.py -u example.com --subfinder-all
-
-# Add custom subdomain candidates from a wordlist
-python3 triageflow.py -u example.com -w ./wordlists/subdomains-small.txt
-
-# Also test HTTP virtual hosts using the same wordlist (authorized lab only)
-python3 triageflow.py -u inlanefreight.local --no-subdomains \
-  -w /path/to/subdomains-top1million-5000.txt --vhost-fuzz
-
-# Use a custom wordlist first, then add Subfinder results
-python3 triageflow.py -u example.com --subfinder-all -w ./wordlists/subdomains-small.txt
-
-# Skip automatic default wordlist selection for this run
-python3 triageflow.py -u example.com --no-wordlist
-
-# Multiple targets (one URL, hostname, or IP per line)
+# Targets from a text file (one target per line)
 python3 triageflow.py -l targets.txt
 
-# Skip Subfinder; process supplied targets and optional wordlist only
-python3 triageflow.py -u example.com --no-subdomains -w ./wordlists/subdomains-small.txt
-
-# Choose output directory, Nuclei severity levels, and timeout
-python3 triageflow.py -u example.com -o ./results --severity medium,high,critical --timeout 10
-
-# Run without Nuclei or screenshots
-python3 triageflow.py -u example.com --no-nuclei --no-screenshots
-
-# Skip only the generated HTML report
-python3 triageflow.py -u example.com --no-html-report
+# Use your own wordlist and opt in to bounded endpoint crawling
+python3 triageflow.py -u https://your-authorized-target.example \
+  -w /path/to/subdomains.txt \
+  --crawl-endpoints
 ```
 
-### Arguments
+TriageFlow asks for an explicit `YES` confirmation before starting its active assessment workflow. This prompt is a reminder, not a substitute for authorization.
 
-| Argument | Description |
+## Reports and output files
+
+Every run gets its own timestamped results directory under `triageflow-results/`. Common artifacts include:
+
+| Artifact | What it contains |
 |---|---|
-| `-u`, `--url` | One domain, hostname, IP, or URL to process. |
-| `-l`, `--list` | Input file containing one target per line; blank lines and `#` comments are ignored. |
-| `-w`, `--wordlist` | Custom subdomain wordlist, one label or hostname per line. Runs before Subfinder; resolved candidates are passed to httpx. |
-| `-o`, `--output` | Base directory for results; each run gets its own timestamped subdirectory. |
-| `--no-subdomains` | Skip Subfinder. Direct targets and any `-w` candidates can still be processed. |
-| `--no-wordlist` | Skip automatic default wordlist detection. Cannot be combined with `-w`. |
-| `--subfinder-all` | Pass Subfinder's `-all` option. |
-| `--severity` | Comma-separated Nuclei severities; default is `medium,high,critical`. |
-| `--timeout` | httpx timeout in seconds; default is `10`. |
-| `--no-nuclei` | Skip the Nuclei stage. |
-| `--no-screenshots` | Skip GoWitness screenshots. In the wizard, choose yes/no independently of the profile. |
-| `--no-html-report` | Skip `report.html`; CSV/JSON/Markdown output remains. |
-| `--version` | Show the TriageFlow version. |
-| `--no-login-check` | Skip login-panel discovery. |
-| `--max-login-hosts` | Maximum number of distinct origins checked for login panels; default `25`. |
-| `--no-cve-lookup` | Skip NVD CVE candidate lookups. |
-| `--max-cve-products` | Maximum versioned product/version pairs queried in NVD; default `5`. |
-| `--dns-threads` | Concurrent DNS workers for the custom wordlist; default `100`. |
-| `--dns-timeout` | Per-query dnsx timeout in seconds; default `2`. |
-| `--dns-resolvers` | Comma-separated DNS resolver IPs; by default the tool reads `/etc/resolv.conf`. Useful in labs with private DNS. |
-| `--vhost-fuzz` | Run ffuf Host-header discovery with the wordlist, even if DNS finds subdomains. |
-| `--vhost-rate` | Maximum ffuf virtual-host requests per second; default `100`. |
-| `--vhost-max-time` | Maximum runtime per root domain for ffuf; default `120` seconds. |
+| `report.html` | Local overview of assets, fingerprints, findings, CVE candidates and stage status. |
+| `attack-surface-map.html` | Searchable, zoomable, offline relationship map generated from saved data. |
+| `attack-surface-map.json` | Machine-readable graph behind the map. |
+| `summary.json` / `README.md` | Run status, counts, stages and a text summary. |
+| `live.txt` / `httpx-details.jsonl` | Live URLs and structured httpx observations. |
+| `asset-inventory.csv` | Filterable asset inventory. |
+| `software-inventory.csv` | Observed products, versions and fingerprint sources. |
+| `cve-candidates.json` / `cve-candidates.md` | NVD search results with automated CPE/version applicability hints. |
+| `nuclei-findings.jsonl` | Template-based scanner observations. |
+| `login-panels.csv` | Login-panel URLs discovered through bounded GET requests only. |
+| `evidence-quality.json` | Cross-tool correlations, classification labels and mismatch/conflict counts. |
+| `ai-triage.json` / `ai-triage.md` | Optional AI-assisted priorities, rationale, safe validation suggestions and remediation. |
 
-Before scanning, the program asks you to type `YES` to confirm the targets are yours or explicitly in scope. Any other answer cancels execution.
+Keep `report.html` alongside its sibling `gowitness/` folder if you want the local screenshot gallery to resolve correctly.
 
-## Results
+## Evidence quality — no API key required
 
-A run creates a timestamped directory under `triageflow-results/` by default, for example:
+You can correlate an existing run without launching a scan or calling an external AI service:
 
-```text
-triageflow-results/20261011-173000/
-├── root-domains.txt          # DNS root domains supplied for discovery
-├── subdomains.txt            # names returned by Subfinder, if enabled
-├── wordlist-candidates.txt   # generated candidates from -w, if used
-├── wordlist-resolved.txt     # wordlist candidates resolving via system DNS
-├── all-targets.txt               # deduplicated inputs for httpx
-├── live.txt                      # responding HTTP/HTTPS URLs
-├── httpx-details.jsonl           # response and fingerprint details
-├── asset-inventory.csv           # flattened web asset inventory
-├── software-inventory.csv        # observed software/product versions
-├── login-panels.csv              # likely login endpoints; GET-only checks
-├── default-credentials-review.md # manual hygiene checklist; not a login test
-├── default-credentials-review.csv
-├── cve-candidates.json           # NVD results with CPE triage labels
-├── cve-candidates.md             # readable CVE candidate report
-├── nuclei-findings.jsonl         # Nuclei findings (if enabled)
-├── report.html                   # consolidated local report (if enabled)
-├── gowitness/                    # screenshots/database artifacts (if enabled)
-├── subfinder.log             # Subfinder output/diagnostics, if enabled
-├── httpx.log                 # httpx output/diagnostics
-├── nuclei.log                # Nuclei output/diagnostics, if enabled
-├── gowitness.log             # GoWitness output/diagnostics, if enabled
-├── summary.json              # machine-readable run summary
-└── README.md                 # human-readable run summary
+```bash
+python3 triageflow.py --quality-only ./triageflow-results/YOUR_RUN_DIRECTORY
 ```
 
-Some files are omitted when their stage is not used. Tool-specific artifact names can change between tool versions. Logs are retained to make failures easier to diagnose.
+This writes `evidence-quality.json` in that existing results directory. The deterministic layer:
 
-## Important implementation details and limitations
+- Links scanner observations to known assets and same-host fingerprints.
+- Separates CPE-supported CVE candidates from product-only and keyword-only leads.
+- Counts repeated host/template observations without silently deleting the raw findings.
+- Flags multiple observed versions for the same product/host instead of guessing which one is correct.
+- Adds context from login panels without claiming that a login page is a vulnerability.
 
-- **Shared input:** Nuclei and GoWitness both consume `live.txt`; therefore discovered hosts are included in both stages if httpx reports them live.
-- **DNS wordlist filtering:** ProjectDiscovery dnsx checks candidates concurrently with bounded per-query timeout and one retry. The configured system DNS resolvers are preferred, so private lab domains may resolve if the lab DNS is configured. A DNS response is not proof that a web service exists; httpx checks live HTTP/HTTPS separately. If a hostname ends in `.local`, passive public subdomain sources often have no useful public records; use the DNS resolver provided by the lab. If you interrupt discovery, TriageFlow returns cleanly without a Python stack trace.
-- **Findings are not verdicts:** Nuclei results, software fingerprints, and NVD keyword/CPE hints can be false positives or require manual verification. Observed banners can be incomplete or inaccurate.
-- **Tool compatibility:** command-line flags and JSON keys can vary between tool versions. If a stage fails, inspect its corresponding log and compare the command with that installed version's help output.
-- **NVD rate limits:** unauthenticated NVD requests are throttled deliberately. The tool limits the number of queried product/version pairs; consider setting `NVD_API_KEY` for larger inventories.
-- **No guarantee of full coverage:** passive discovery sources, DNS behavior, timeouts, rate limits, and scope all affect results.
-- **Default-credential handling:** TriageFlow only creates a manual configuration-review checklist. It does not attempt authentication or submit default passwords.
-- **Sensitive output:** screenshots, reports, and logs may contain tokens, internal hostnames, or personal data. Protect them and do not commit scan results to a public repository.
-- **Safe use:** respect written scope, rate limits, and rules of engagement. Do not scan systems without authorization.
+**Interpretation matters:** a correlated finding is still a reported observation. A CVE candidate is not confirmed until its affected-version conditions and the target's actual state are validated.
 
-## Project status
+## Optional AI triage
 
-Early-stage utility. The goal is to provide a transparent, repeatable orchestration layer—not to replace the underlying tools or automatically declare a system secure/insecure. Contributions should keep the README aligned with actual command-line behavior.
+AI triage reviews selected, bounded artifacts already saved by TriageFlow. It does not run scanners, execute tools, or contact targets. It generates `ai-triage.json` and `ai-triage.md`, and also saves the deterministic `evidence-quality.json`.
+
+```bash
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+export TRIAGEFLOW_AI_MODEL="gpt-6-astra"
+
+python3 triageflow.py --ai-triage ./triageflow-results/YOUR_RUN_DIRECTORY
+```
+
+Choose a different model ID if your OpenAI API project does not have access to the default:
+
+```bash
+python3 triageflow.py \
+  --ai-triage ./triageflow-results/YOUR_RUN_DIRECTORY \
+  --ai-model YOUR_AVAILABLE_MODEL_ID
+```
+
+Read [AI_TRIAGE.md](AI_TRIAGE.md) for full setup instructions and limitations. A ChatGPT subscription does not automatically include API credits. Never commit an API key or send confidential/third-party evidence to an external service unless your authorization and data-handling policy permit it.
+
+## Labeled regression checks
+
+Run the deterministic evidence-correlation fixture:
+
+```bash
+python3 triageflow_quality.py --evaluate tests/fixtures/triage_quality_cases.json
+```
+
+The current fixture contains five synthetic scenarios and ten expected classifications. Its 100% score means the implementation matches those authored regression labels; it is **not** a measure of real-world vulnerability-detection accuracy or LLM quality.
+
+Run the project's full test suite:
+
+```bash
+python3 -m py_compile triageflow.py triageflow_enrichment.py triageflow_reports.py triageflow_map.py triageflow_ai.py triageflow_quality.py
+python3 -m unittest discover -s tests -v
+```
+
+GitHub Actions also exercises Python 3.10, 3.11, 3.12 and 3.13.
+
+## Tool roles and network behavior
+
+| Component | Role | Notes |
+|---|---|---|
+| Subfinder | Passive subdomain discovery | Optional to disable with `--no-subdomains`. |
+| dnsx + wordlist | Candidate subdomain resolution | Uses bounded timeout/retry settings and wildcard filtering. |
+| httpx | Live HTTP probing and technology detection | Main source of live URLs and web-service observations. |
+| NVD API | Candidate CVE enrichment | Keyword results and CPE hints require manual/vendor validation. |
+| Login discovery | Finds likely authentication pages | Bounded GET-only requests; no credentials are submitted. |
+| Nuclei | Template-based security checks | Finding output remains unverified until reviewed. |
+| GoWitness | Screenshots | Can be skipped with `--no-screenshots`. |
+| Katana | Endpoint crawling | Opt-in via `--crawl-endpoints`; bounded by depth, rate and duration. |
+| Attack-surface map | Visualizes saved relationships | Offline generation; it does not contact the target. |
+| AI triage | Prioritizes saved evidence | Optional external API call; no model-controlled tool execution. |
+
+Some stages send requests to the selected targets. Use them only within your authorized scope. The attack-surface map and evidence-correlation stage operate on local artifacts.
+
+## Useful options
+
+| Option | Purpose |
+|---|---|
+| `-u URL` | Supply a single target. |
+| `-l FILE` | Read targets from a text file. |
+| `-w FILE` | Specify a custom wordlist. |
+| `--no-subdomains` | Skip Subfinder discovery. |
+| `--no-wordlist` | Disable automatic wordlist selection. |
+| `--vhost-fuzz` | Also try virtual-host discovery with ffuf. |
+| `--crawl-endpoints` | Enable bounded Katana crawling. |
+| `--no-nuclei` | Skip Nuclei. |
+| `--no-screenshots` | Skip GoWitness. |
+| `--no-login-check` | Skip login-panel discovery. |
+| `--no-cve-lookup` | Skip NVD candidate lookup. |
+| `--quality-only RESULTS_DIR` | Correlate saved evidence without the AI API. |
+| `--ai-triage RESULTS_DIR` | Run optional AI triage on a saved run. |
+| `--help` | Show all CLI options. |
+
+For direct virtual-host discovery without DNS pre-resolution, see `vhost_direct.py` and the detailed instructions in the [Greek guide](QUICKSTART_EL.md).
+
+## Safety, privacy and limitations
+
+- Only run active checks against systems you own or are explicitly authorized to assess.
+- TriageFlow does not attempt to authenticate or submit credentials.
+- NVD keyword hits, CPE hints, fingerprints and Nuclei results can be incomplete or wrong; validate before drawing conclusions.
+- AI triage sends selected evidence to OpenAI only when you explicitly use `--ai-triage`. The artifacts may contain target hostnames, URLs, response titles or scanner metadata.
+- AI output is advisory. Review the original evidence and vendor advisories before changing systems or reporting a vulnerability.
+- Correlation can strengthen the context around an observation, but it cannot independently prove reachability, affected configuration or exploitability.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing larger changes. Keep test fixtures synthetic or properly authorized, never commit credentials, and add regression tests for bug fixes.
+
+## License
+
+TriageFlow is released under the [MIT License](LICENSE).

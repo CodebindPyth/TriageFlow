@@ -1,4 +1,4 @@
-# TriageFlow v2.1.0 — Οδηγός χρήσης στα Ελληνικά
+# TriageFlow v2.2.0 — Οδηγός χρήσης στα Ελληνικά
 
 Αυτός είναι ο πρακτικός οδηγός για να ξεκινήσεις χωρίς να χρειάζεται να θυμάσαι παραμέτρους ή να γράφεις μεγάλες εντολές.
 
@@ -322,3 +322,41 @@ python3 triageflow.py -u https://example.com --crawl-endpoints --crawl-depth 3 -
 ```
 
 Το βάθος επιτρέπεται από 1 έως 5, ο ρυθμός από 1 έως 50 requests/δευτερόλεπτο και η διάρκεια από 5 δευτερόλεπτα έως 5 λεπτά. Τα αποτελέσματα αποθηκεύονται στα `katana-findings.jsonl` και `katana.log`. Δεν υποβάλλονται credentials και δεν γίνεται αυτόματο login.
+
+
+## 11. Evidence quality και προαιρετικό AI triage
+
+Στη v2.2 υπάρχει ξεχωριστό επίπεδο συσχέτισης που συγκρίνει τα αποθηκευμένα Nuclei findings, τα assets, τα software fingerprints, τα CVE candidates και τα login panels. Παράγει ταξινομήσεις και μετρήσεις συσχέτισης· δεν αποδεικνύει από μόνο του ότι μία ευπάθεια είναι exploitable.
+
+### Μόνο συσχέτιση — χωρίς API key και χωρίς νέα σάρωση
+
+Δώσε τον φάκελο αποτελεσμάτων μίας προηγούμενης εκτέλεσης:
+
+```bash
+python3 triageflow.py --quality-only ./triageflow-results/ΟΝΟΜΑ_ΦΑΚΕΛΟΥ
+```
+
+Θα δημιουργηθεί το `evidence-quality.json` μέσα στον ίδιο φάκελο.
+
+### Προαιρετικό AI report
+
+Το AI triage διαβάζει επιλεγμένα, ήδη αποθηκευμένα artifacts και δημιουργεί `ai-triage.json` και `ai-triage.md`. Δεν εκκινεί scanners και δεν επικοινωνεί με targets.
+
+```bash
+export OPENAI_API_KEY="ΤΟ_API_KEY_ΣΟΥ"
+export TRIAGEFLOW_AI_MODEL="gpt-6-astra"
+
+python3 triageflow.py --ai-triage ./triageflow-results/ΟΝΟΜΑ_ΦΑΚΕΛΟΥ
+```
+
+Το API key χρειάζεται ξεχωριστή πρόσβαση/χρέωση API· μία συνδρομή ChatGPT δεν παρέχει αυτόματα API credits. Αν το μοντέλο δεν είναι διαθέσιμο στο API project σου, όρισε το `TRIAGEFLOW_AI_MODEL` σε model ID που υποστηρίζεται από τον λογαριασμό σου. Μη βάζεις το κλειδί σε αρχεία του repository ή σε screenshots.
+
+### Έλεγχος των κανόνων συσχέτισης
+
+```bash
+python3 triageflow_quality.py --evaluate tests/fixtures/triage_quality_cases.json
+```
+
+Το fixture περιέχει πέντε συνθετικές περιπτώσεις με δέκα αναμενόμενες ταξινομήσεις. Το 100% σημαίνει ότι οι κανόνες συμφωνούν με τις ετικέτες αυτών των δοκιμών· **δεν** είναι μέτρηση πραγματικής ακρίβειας εντοπισμού ευπαθειών ούτε benchmark του AI model.
+
+Για την περιγραφή της αρχιτεκτονικής και τα διαγράμματα ροής, δες το [README](README.md) και τα [visual diagrams](docs/architecture.svg), [evidence correlation map](docs/ai-evidence-map.svg).

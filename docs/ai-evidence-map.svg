@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="850" viewBox="0 0 1400 850" role="img" aria-labelledby="title desc">
+  <title id="title">TriageFlow evidence correlation and AI triage</title>
+  <desc id="desc">A flow diagram showing saved artifacts linked through host and product-version correlation, then rendered into quality and optional AI reports.</desc>
+  <defs>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#10233f"/><stop offset="1" stop-color="#1e4c72"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#59788f"/></marker>
+    <style>
+      .title{font:700 29px Inter,Segoe UI,Arial,sans-serif;fill:#fff}.subtitle{font:400 15px Inter,Segoe UI,Arial,sans-serif;fill:#d6e6f4}.head{font:700 15px Inter,Segoe UI,Arial,sans-serif;fill:#19344c}.body{font:400 12.5px Inter,Segoe UI,Arial,sans-serif;fill:#496175}.small{font:400 11px Inter,Segoe UI,Arial,sans-serif;fill:#61798c}.section{font:700 12px Inter,Segoe UI,Arial,sans-serif;letter-spacing:1.2px;fill:#617a91}
+      .card{fill:#fff;stroke:#cad8e5;stroke-width:1.5}.blue{fill:#edf6ff;stroke:#86b6df;stroke-width:1.5}.green{fill:#edf8f4;stroke:#8ac9b2;stroke-width:1.5}.violet{fill:#f3f0ff;stroke:#b1a3e5;stroke-width:1.5}.amber{fill:#fff7e8;stroke:#e7bd70;stroke-width:1.5}.line{fill:none;stroke:#59788f;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1400" height="850" rx="22" fill="#f5f8fb"/>
+  <rect width="1400" height="102" rx="22" fill="url(#header)"/><rect y="80" width="1400" height="22" fill="url(#header)"/>
+  <text x="48" y="47" class="title">Evidence correlation → trustworthy triage</text>
+  <text x="48" y="73" class="subtitle">Link observations across tools before asking an LLM to prioritize them</text>
+
+  <text x="42" y="137" class="section">SAVED ARTIFACTS</text>
+  <rect x="42" y="157" width="238" height="92" rx="13" class="blue"/>
+  <text x="62" y="184" class="head">Asset inventory</text><text x="62" y="206" class="body">Hostname · URL · status</text><text x="62" y="228" class="small">asset-inventory.csv</text>
+  <rect x="42" y="270" width="238" height="92" rx="13" class="green"/>
+  <text x="62" y="297" class="head">Software fingerprints</text><text x="62" y="319" class="body">Product · observed version</text><text x="62" y="341" class="small">software-inventory.csv</text>
+  <rect x="42" y="383" width="238" height="92" rx="13" class="violet"/>
+  <text x="62" y="410" class="head">Nuclei findings</text><text x="62" y="432" class="body">Template · host · severity</text><text x="62" y="454" class="small">nuclei-findings.jsonl</text>
+  <rect x="42" y="496" width="238" height="92" rx="13" class="amber"/>
+  <text x="62" y="523" class="head">NVD CVE candidates</text><text x="62" y="545" class="body">CVE · CPE hint · version</text><text x="62" y="567" class="small">cve-candidates.json</text>
+  <rect x="42" y="609" width="238" height="92" rx="13" class="card"/>
+  <text x="62" y="636" class="head">Login panels</text><text x="62" y="658" class="body">Origin · login URL</text><text x="62" y="680" class="small">login-panels.csv</text>
+
+  <path d="M280 203 H322 V410 H346" class="line"/>
+  <path d="M280 316 H322" class="line"/>
+  <path d="M280 429 H346" class="line"/>
+  <path d="M280 542 H322 V462 H346" class="line"/>
+  <path d="M280 655 H322 V510 H346" class="line"/>
+
+  <text x="346" y="137" class="section">CORRELATION RULES (DETERMINISTIC)</text>
+  <rect x="346" y="157" width="310" height="544" rx="16" fill="#edf3f8" stroke="#c2d2df" stroke-width="1.5"/>
+  <rect x="368" y="180" width="266" height="100" rx="12" class="card"/>
+  <circle cx="392" cy="204" r="11" fill="#dcecf8"/><text x="415" y="209" class="head">Host-level matching</text>
+  <text x="388" y="237" class="body">Link observations to the same</text><text x="388" y="256" class="body">normalized hostname.</text>
+  <rect x="368" y="300" width="266" height="100" rx="12" class="card"/>
+  <circle cx="392" cy="324" r="11" fill="#dcecf8"/><text x="415" y="329" class="head">Product + version matching</text>
+  <text x="388" y="357" class="body">Distinguish CPE-supported leads</text><text x="388" y="376" class="body">from keyword-only candidates.</text>
+  <rect x="368" y="420" width="266" height="100" rx="12" class="card"/>
+  <circle cx="392" cy="444" r="11" fill="#dcecf8"/><text x="415" y="449" class="head">Deduplication &amp; conflicts</text>
+  <text x="388" y="477" class="body">Count repeated templates and</text><text x="388" y="496" class="body">flag conflicting version reports.</text>
+  <rect x="368" y="540" width="266" height="124" rx="12" class="card"/>
+  <text x="388" y="569" class="head">Conservative classifications</text>
+  <text x="388" y="594" class="body">• corroborated / partially linked</text>
+  <text x="388" y="615" class="body">• unlinked / version unconfirmed</text>
+  <text x="388" y="636" class="body">• candidate, not confirmed</text>
+
+  <path d="M656 429 H694" class="line"/>
+  <text x="692" y="137" class="section">EVIDENCE QUALITY</text>
+  <rect x="694" y="180" width="250" height="484" rx="16" class="blue"/>
+  <text x="819" y="211" text-anchor="middle" class="head" style="font-size:18px">Quality summary</text>
+  <line x1="720" y1="231" x2="918" y2="231" stroke="#c5dced"/>
+  <text x="720" y="266" class="body">Corroborated findings</text>
+  <text x="720" y="294" class="body">Unlinked scanner reports</text>
+  <text x="720" y="322" class="body">Host-linked CVE candidates</text>
+  <text x="720" y="350" class="body">Keyword-only CVE leads</text>
+  <text x="720" y="378" class="body">Version conflicts</text>
+  <rect x="716" y="415" width="206" height="102" rx="11" fill="#fff" stroke="#a8c6dd"/>
+  <text x="819" y="443" text-anchor="middle" class="head">evidence-quality.json</text>
+  <text x="819" y="466" text-anchor="middle" class="small">Machine-readable counts</text>
+  <text x="819" y="487" text-anchor="middle" class="small">and per-record links</text>
+  <text x="819" y="555" text-anchor="middle" class="small">Correlation ≠ exploitability</text>
+  <text x="819" y="575" text-anchor="middle" class="small">Finding status stays unverified</text>
+  <text x="819" y="620" text-anchor="middle" class="small">No API key required</text>
+
+  <path d="M944 330 H976" class="line"/>
+  <text x="974" y="137" class="section">OPTIONAL LLM</text>
+  <rect x="976" y="180" width="186" height="484" rx="16" class="violet"/>
+  <text x="1069" y="214" text-anchor="middle" class="head" style="font-size:16px">AI triage</text>
+  <text x="995" y="251" class="body">Receives selected,</text><text x="995" y="271" class="body">bounded saved evidence</text>
+  <text x="995" y="311" class="body">Returns schema-based</text><text x="995" y="331" class="body">priorities + confidence</text>
+  <text x="995" y="371" class="body">Validation steps</text><text x="995" y="391" class="body">and remediation</text>
+  <rect x="994" y="432" width="150" height="76" rx="10" fill="#fff" stroke="#b1a3e5"/>
+  <text x="1069" y="460" text-anchor="middle" class="head" style="font-size:13px">OPENAI_API_KEY</text>
+  <text x="1069" y="483" text-anchor="middle" class="small">Required for AI mode</text>
+  <text x="995" y="546" class="small">Cannot execute tools</text>
+  <text x="995" y="566" class="small">Cannot start scans</text>
+  <text x="995" y="586" class="small">Advisory-only output</text>
+
+  <path d="M1162 330 H1192" class="line"/>
+  <text x="1190" y="137" class="section">DELIVERABLES</text>
+  <rect x="1192" y="180" width="166" height="484" rx="16" fill="#edf8f4" stroke="#8ac9b2" stroke-width="1.5"/>
+  <rect x="1210" y="207" width="130" height="92" rx="10" class="card"/>
+  <text x="1275" y="237" text-anchor="middle" class="head" style="font-size:14px">JSON report</text>
+  <text x="1275" y="258" text-anchor="middle" class="small">ai-triage.json</text>
+  <text x="1275" y="279" text-anchor="middle" class="small">structured</text>
+  <rect x="1210" y="323" width="130" height="92" rx="10" class="card"/>
+  <text x="1275" y="353" text-anchor="middle" class="head" style="font-size:14px">Markdown</text>
+  <text x="1275" y="374" text-anchor="middle" class="small">ai-triage.md</text>
+  <text x="1275" y="395" text-anchor="middle" class="small">human-readable</text>
+  <rect x="1210" y="439" width="130" height="92" rx="10" class="card"/>
+  <text x="1275" y="469" text-anchor="middle" class="head" style="font-size:14px">Quality JSON</text>
+  <text x="1275" y="490" text-anchor="middle" class="small">evidence-quality</text>
+  <text x="1275" y="511" text-anchor="middle" class="small">evidence links</text>
+  <text x="1275" y="572" text-anchor="middle" class="small">Manual review</text>
+  <text x="1275" y="592" text-anchor="middle" class="small">before conclusions</text>
+
+  <rect x="346" y="747" width="1012" height="64" rx="13" fill="#10233f"/>
+  <text x="368" y="773" class="subtitle" style="font-weight:700">Evaluation note</text>
+  <text x="368" y="795" class="subtitle" style="font-size:13px">Synthetic labeled fixtures test rule regressions; they do not measure real-world vulnerability-detection accuracy.</text>
+</svg>
