@@ -1,0 +1,223 @@
+{
+  "name": "TriageFlow evidence-correlation labeled regression cases v1",
+  "description": "Synthetic, deterministic tests of cross-artifact correlation. These labels test rule correctness, not real-world scanner performance.",
+  "cases": [
+    {
+      "id": "linked-cpe-supported-candidate",
+      "evidence": {
+        "assets": [
+          {
+            "url": "https://app.example.test/",
+            "hostname": "app.example.test"
+          }
+        ],
+        "software_fingerprints": [
+          {
+            "url": "https://app.example.test/",
+            "product": "WordPress",
+            "version": "6.4.3",
+            "source": "tech"
+          }
+        ],
+        "cve_candidates": [
+          {
+            "candidate_id": "CVE-TEST-0001",
+            "product": "WordPress",
+            "observed_version": "6.4.3",
+            "match_confidence": "CPE applicability supports observed version (verify vendor advisory)",
+            "source_urls": [
+              "https://app.example.test/"
+            ]
+          }
+        ],
+        "nuclei_findings": [
+          {
+            "template_id": "wp-sample-template",
+            "name": "Sample WordPress check",
+            "severity_as_reported": "medium",
+            "matched_at": "https://app.example.test/wp-login.php"
+          }
+        ],
+        "login_panels": [
+          {
+            "origin": "https://app.example.test",
+            "login_url": "https://app.example.test/wp-login.php"
+          }
+        ]
+      },
+      "expected": {
+        "cve_classifications": [
+          "linked_cpe_supported_candidate"
+        ],
+        "nuclei_classifications": [
+          "corroborated_scanner_finding"
+        ]
+      }
+    },
+    {
+      "id": "keyword-only-cve-and-unlinked-nuclei",
+      "evidence": {
+        "assets": [
+          {
+            "url": "https://app.example.test/",
+            "hostname": "app.example.test"
+          }
+        ],
+        "software_fingerprints": [
+          {
+            "url": "https://app.example.test/",
+            "product": "WordPress",
+            "version": "6.4.3",
+            "source": "tech"
+          }
+        ],
+        "cve_candidates": [
+          {
+            "candidate_id": "CVE-TEST-0002",
+            "product": "WordPress",
+            "observed_version": "6.4.3",
+            "match_confidence": "Keyword-only candidate; no matching product CPE criteria found",
+            "source_urls": [
+              "https://app.example.test/"
+            ]
+          }
+        ],
+        "nuclei_findings": [
+          {
+            "template_id": "orphan-template",
+            "name": "Unlinked sample",
+            "severity_as_reported": "high",
+            "matched_at": "https://orphan.example.test/"
+          }
+        ]
+      },
+      "expected": {
+        "cve_classifications": [
+          "keyword_only_lead"
+        ],
+        "nuclei_classifications": [
+          "unlinked_scanner_finding"
+        ]
+      }
+    },
+    {
+      "id": "cpe-product-match-version-unconfirmed",
+      "evidence": {
+        "assets": [
+          {
+            "url": "https://admin.example.test/",
+            "hostname": "admin.example.test"
+          }
+        ],
+        "software_fingerprints": [],
+        "cve_candidates": [
+          {
+            "candidate_id": "CVE-TEST-0003",
+            "product": "Apache Tomcat",
+            "observed_version": "9.0.7",
+            "match_confidence": "CPE product matched; affected version range is unspecified",
+            "source_urls": [
+              "https://admin.example.test/"
+            ]
+          }
+        ],
+        "nuclei_findings": [
+          {
+            "template_id": "admin-observation",
+            "name": "Sample observation",
+            "severity_as_reported": "info",
+            "matched_at": "https://admin.example.test/"
+          }
+        ]
+      },
+      "expected": {
+        "cve_classifications": [
+          "cpe_product_version_unconfirmed"
+        ],
+        "nuclei_classifications": [
+          "asset_matched_scanner_finding"
+        ]
+      }
+    },
+    {
+      "id": "cpe-supported-but-source-host-unlinked",
+      "evidence": {
+        "assets": [
+          {
+            "url": "https://inventory.example.test/",
+            "hostname": "inventory.example.test"
+          }
+        ],
+        "software_fingerprints": [
+          {
+            "url": "https://inventory.example.test/",
+            "product": "WordPress",
+            "version": "6.4.3",
+            "source": "tech"
+          }
+        ],
+        "cve_candidates": [
+          {
+            "candidate_id": "CVE-TEST-0004",
+            "product": "WordPress",
+            "observed_version": "6.4.3",
+            "match_confidence": "CPE applicability supports observed version (verify vendor advisory)",
+            "source_urls": [
+              "https://legacy.example.test/"
+            ]
+          }
+        ],
+        "nuclei_findings": [
+          {
+            "template_id": "asset-link-only",
+            "name": "Asset-level finding",
+            "severity_as_reported": "low",
+            "matched_at": "https://inventory.example.test/"
+          }
+        ]
+      },
+      "expected": {
+        "cve_classifications": [
+          "fingerprint_seen_but_source_host_unlinked"
+        ],
+        "nuclei_classifications": [
+          "corroborated_scanner_finding"
+        ]
+      }
+    },
+    {
+      "id": "cpe-supported-without-observed-fingerprint",
+      "evidence": {
+        "assets": [],
+        "software_fingerprints": [],
+        "cve_candidates": [
+          {
+            "candidate_id": "CVE-TEST-0005",
+            "product": "PHP",
+            "observed_version": "8.2.1",
+            "match_confidence": "CPE applicability supports observed version (verify vendor advisory)",
+            "source_urls": [
+              "https://unknown.example.test/"
+            ]
+          }
+        ],
+        "nuclei_findings": [
+          {
+            "template_id": "no-asset",
+            "name": "Unlinked observation",
+            "severity_as_reported": "critical",
+            "matched_at": "https://unknown.example.test/"
+          }
+        ]
+      },
+      "expected": {
+        "cve_classifications": [
+          "cpe_supported_candidate_without_fingerprint"
+        ],
+        "nuclei_classifications": [
+          "unlinked_scanner_finding"
+        ]
+      }
+    }
+  ]
+}
