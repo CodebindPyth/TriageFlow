@@ -188,9 +188,9 @@ def analyze_saved_results(output_dir: Path, model: str | None = None,
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
         raise RuntimeError("OpenAI API returned missing or malformed JSON output.") from exc
     required = {"executive_summary", "limitations", "prioritized_findings", "recommended_next_steps"}
-    if not isinstance(report, dict) or set(report) != required:
+    if (not isinstance(report, dict) or set(report) != required\n            or not isinstance(report.get("executive_summary"), str)):
         raise RuntimeError("AI report did not match the expected top-level schema.")
-    if not all(isinstance(report[key], list) for key in ("limitations", "prioritized_findings", "recommended_next_steps")):
+    if (not all(isinstance(report[key], list) for key in ("limitations", "prioritized_findings", "recommended_next_steps"))\n            or any(not all(isinstance(item, str) for item in report[key])\n                   for key in ("limitations", "recommended_next_steps"))):
         raise RuntimeError("AI report contains invalid list fields.")
     for finding in report["prioritized_findings"]:
         if (not isinstance(finding, dict) or finding.get("priority") not in {"P1", "P2", "P3", "P4"}
