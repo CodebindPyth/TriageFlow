@@ -51,6 +51,33 @@ class EvidenceCorrelationTests(unittest.TestCase):
         self.assertEqual(len(report["software_version_conflicts"]), 1)
         self.assertEqual(report["software_version_conflicts"][0]["observed_versions"], ["1.24.0", "1.26.0"])
 
+    def test_evaluator_penalizes_unexpected_predictions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = Path(temp) / "fixture.json"
+            fixture.write_text(json.dumps({
+                "name": "unexpected prediction",
+                "cases": [{
+                    "id": "unexpected-cve",
+                    "evidence": {
+                        "assets": [],
+                        "software_fingerprints": [],
+                        "cve_candidates": [{
+                            "candidate_id": "CVE-TEST-9999",
+                            "product": "WordPress",
+                            "observed_version": "6.4.3",
+                            "match_confidence": "Keyword-only candidate; no matching product CPE criteria found",
+                            "source_urls": ["https://example.test/"],
+                        }],
+                        "nuclei_findings": [],
+                        "login_panels": [],
+                    },
+                    "expected": {"cve_classifications": [], "nuclei_classifications": []},
+                }],
+            }), encoding="utf-8")
+            report = evaluate_labeled_fixtures(fixture)
+            self.assertFalse(report["passed"])
+            self.assertEqual(report["overall_classification_accuracy"], 0.0)
+
     def test_evaluation_output_is_json_serializable(self):
         report = evaluate_labeled_fixtures(FIXTURE)
         self.assertEqual(json.loads(json.dumps(report))["overall_classification_accuracy"], 1.0)
