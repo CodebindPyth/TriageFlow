@@ -1,4 +1,4 @@
-# TriageFlow 2.2.0 · Security Reconnaissance & Evidence Triage
+# TriageFlow 2.3.0 · Security Reconnaissance & Evidence Triage
 
 TriageFlow 2.3.0 adds a bounded Tomcat CGI review: when a Tomcat/Apache-Coyote fingerprint is observed, it sends a small set of same-origin GET-only requests to common CGI directories and `.bat`/`.cmd` paths. It sends no query strings, command arguments, credentials, or exploit payloads. Non-404 responses are only candidates for manual review and may be caused by custom 404/catch-all routes. Disable it with `--no-tomcat-cgi-check`.
 
