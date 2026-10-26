@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Compile Python files
-        run: python -m py_compile triageflow.py triageflow_enrichment.py triageflow_reports.py triageflow_map.py triageflow_ai.py triageflow_quality.py
+        run: python -m py_compile triageflow_cgi.py triageflow.py triageflow_enrichment.py triageflow_reports.py triageflow_map.py triageflow_ai.py triageflow_quality.py
       - name: Validate SVG diagrams
         run: python -c "import xml.etree.ElementTree as ET; [ET.parse(p) for p in ('docs/architecture.svg', 'docs/ai-evidence-map.svg')]"
       - name: Run unit tests
