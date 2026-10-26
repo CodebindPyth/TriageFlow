@@ -31,8 +31,9 @@ from triageflow_reports import (
 )
 from triageflow_map import generate_attack_surface_map
 from triageflow_ai import analyze_saved_results, build_evidence, write_markdown_report
+from triageflow_cgi import run_tomcat_cgi_check
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 GO_BIN = Path.home() / "go" / "bin"
 GO_INSTALLS = {
     "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
@@ -632,6 +633,7 @@ def save_report(out_dir: Path, status: dict) -> None:
         "- software-inventory.csv: observed products and available versions",
         "- attack-surface-map.html and attack-surface-map.json: offline relationship map, if enabled",
         "- katana-findings.jsonl: in-scope endpoints found by optional Katana crawl",
+        "- tomcat-cgi-findings.csv/.json: bounded GET-only CGI directory and .bat/.cmd candidates when Tomcat is fingerprinted",
         "- login-panels.csv: likely login endpoints found with GET-only checks",
         "- default-credentials-review.md/.csv: manual hardening checklist; no login attempts",
         "- cve-candidates.json and cve-candidates.md: NVD keyword search candidates",
@@ -895,6 +897,8 @@ def main() -> int:
                         help="Katana maximum requests/second (1-50; default: 5)")
     parser.add_argument("--crawl-duration", default="30s",
                         help="Katana max per-target duration, e.g. 30s or 2m (5s-5m; default: 30s)")
+    parser.add_argument("--no-tomcat-cgi-check", action="store_true",
+                        help="Skip bounded GET-only Tomcat CGI/.bat/.cmd endpoint discovery")
     parser.add_argument("--version", action="version", version=f"TriageFlow {VERSION}")
     args = parser.parse_args()
     wizard_mode = args.wizard or (not args.list and not args.single_target)
@@ -1245,6 +1249,30 @@ def main() -> int:
     write_lines(live_file, live)
     assets = write_asset_inventory(httpx_records, out_dir / "asset-inventory.csv")
     fingerprints = write_software_inventory(httpx_records, out_dir / "software-inventory.csv")
+
+    if args.no_tomcat_cgi_check:
+        status["stages"]["tomcat_cgi_check"] = {
+            "status": "skipped", "reason": "disabled with --no-tomcat-cgi-check"
+        }
+    else:
+        try:
+            cgi_summary = run_tomcat_cgi_check(
+                httpx_records, fingerprints, out_dir,
+                timeout=min(max(float(args.timeout), 1.0), 4.0),
+            )
+            status["tomcat_cgi_candidate_count"] = cgi_summary["candidate_count"]
+            status["stages"]["tomcat_cgi_check"] = {
+                key: value for key, value in cgi_summary.items() if key != "candidates"
+            }
+            print(
+                f"[+] Tomcat CGI review: {cgi_summary['candidate_count']} possible endpoint(s); "
+                f"see {cgi_summary['csv']}"
+            )
+        except Exception as exc:
+            status["stages"]["tomcat_cgi_check"] = {
+                "status": "failed", "error": str(exc)
+            }
+            print(f"[WARN] Tomcat CGI endpoint discovery failed: {exc}", file=sys.stderr)
     status["live_url_count"] = len(live)
     if args.bruteforce_direct:
         live_hosts = {
@@ -1379,6 +1407,8 @@ def main() -> int:
         print(f"    Map graph JSON: {out_dir / 'attack-surface-map.json'}")
     if args.crawl_endpoints:
         print(f"    Katana endpoints: {out_dir / 'katana-findings.jsonl'}")
+    if (out_dir / "tomcat-cgi-findings.csv").is_file():
+        print(f"    Tomcat CGI candidates: {out_dir / 'tomcat-cgi-findings.csv'}")
     if failures:
         print("[!] Failed stage(s): " + ", ".join(failures))
         return 1
