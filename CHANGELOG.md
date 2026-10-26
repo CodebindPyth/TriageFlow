@@ -1,3 +1,10 @@
+## [2.3.0] - 2026-10-26
+
+- Added bounded, GET-only Tomcat CGI endpoint review after technology fingerprinting.
+- Reports candidate CGI directories and common `.bat`/`.cmd` paths to `tomcat-cgi-findings.csv` and `tomcat-cgi-findings.json`.
+- The check sends no query strings, command arguments, credentials, or exploit payloads; findings require manual verification.
+- Added `--no-tomcat-cgi-check` to disable the check.
+
 # Changelog
 
 ## 2.2.0 — 2026-10-25
