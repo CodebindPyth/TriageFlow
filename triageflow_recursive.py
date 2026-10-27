@@ -55,7 +55,7 @@ def recursive_subfinder(
     for depth in range(1, max_depth + 1):
         if not frontier or len(discovered) >= max_hosts:
             break
-        frontier = frontier[:max_hosts]
+        frontier = frontier[: max(0, max_hosts - len(discovered))]
         input_file = out_dir / f"recursive-subfinder-depth-{depth}-input.txt"
         output_file = out_dir / f"recursive-subfinder-depth-{depth}.txt"
         log_file = out_dir / f"recursive-subfinder-depth-{depth}.log"
