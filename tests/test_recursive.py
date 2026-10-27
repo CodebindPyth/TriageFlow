@@ -26,6 +26,15 @@ class RecursiveSubdomainTests(unittest.TestCase):
             write_lines(path, ["api.example.test", "api.example.test", "dev.example.test"])
             self.assertEqual(read_lines(path), ["api.example.test", "dev.example.test"])
 
+    def test_recursive_validation_rejects_invalid_depth_and_host_cap(self):
+        from pathlib import Path
+        from triageflow_recursive import recursive_subfinder
+
+        with self.assertRaises(ValueError):
+            recursive_subfinder(["api.example.test"], ["example.test"], Path("."), max_depth=0)
+        with self.assertRaises(ValueError):
+            recursive_subfinder(["api.example.test"], ["example.test"], Path("."), max_hosts=0)
+
 
 if __name__ == "__main__":
     unittest.main()
