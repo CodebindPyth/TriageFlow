@@ -45,6 +45,8 @@ def recursive_subfinder(
         raise ValueError("max_hosts must be at least 1")
 
     normalized_roots = list(dict.fromkeys(r.lower().strip().rstrip(".") for r in roots if r.strip()))
+    if not normalized_roots:
+        raise ValueError("at least one root domain is required")
     seed_set = {h.lower().strip().rstrip(".") for h in seed_hosts if is_in_scope(h, normalized_roots)}
     known = set(seed_set)
     frontier = list(sorted(seed_set))
