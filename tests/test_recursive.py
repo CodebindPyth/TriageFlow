@@ -1,6 +1,9 @@
 import unittest
 
-from triageflow_recursive import is_in_scope
+from pathlib import Path
+import tempfile
+
+from triageflow_recursive import is_in_scope, read_lines, write_lines
 
 
 class RecursiveSubdomainTests(unittest.TestCase):
@@ -16,6 +19,12 @@ class RecursiveSubdomainTests(unittest.TestCase):
 
     def test_case_and_trailing_dot_are_normalized(self):
         self.assertTrue(is_in_scope("API.Example.Test.", ["example.test"]))
+
+    def test_line_helpers_write_one_host_per_line(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "hosts.txt"
+            write_lines(path, ["api.example.test", "api.example.test", "dev.example.test"])
+            self.assertEqual(read_lines(path), ["api.example.test", "dev.example.test"])
 
 
 if __name__ == "__main__":
