@@ -340,6 +340,36 @@ def discover_wordlist(
                         rc = process.wait(timeout=10)
                         break
                     except subprocess.TimeoutExpired:
+                        if cancel_key and sys.stdin.isatty():
+                            try:
+                                import select
+                                import termios
+                                import tty
+
+                                fd = sys.stdin.fileno()
+                                old_settings = termios.tcgetattr(fd)
+                                try:
+                                    tty.setcbreak(fd)
+                                    ready, _, _ = select.select([sys.stdin], [], [], 0)
+                                    if ready and sys.stdin.read(1) == "\\x18":
+                                        print(
+                                            f"\\n[!] {name}: Ctrl+X pressed; terminating this stage "
+                                            "and preserving partial output.",
+                                            flush=True,
+                                        )
+                                        process.terminate()
+                                        try:
+                                            process.wait(timeout=3)
+                                        except subprocess.TimeoutExpired:
+                                            process.kill()
+                                            process.wait()
+                                        return_code = 130
+                                        break
+                                finally:
+                                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                            except (ImportError, OSError, ValueError):
+                                # Shortcut polling is best-effort; Ctrl+C remains supported.
+                                pass
                         elapsed = int(time.monotonic() - started)
                         print(
                             f"[+] dnsx is still resolving candidates ({elapsed}s elapsed); "
@@ -509,12 +539,13 @@ def run_step(
     log_path: Path,
     progress_file: Path | None = None,
     heartbeat_interval: float = 10.0,
+    cancel_key: str | None = None,
 ) -> int:
     """Run an external tool, log its output, and print a heartbeat while it works.
 
-    When progress_file is provided, report how many newline-delimited records
-    have been appended since the previous heartbeat. This is useful for quiet
-    tools such as httpx that otherwise appear to hang when output is redirected.
+    When progress_file is provided, report appended output records at each heartbeat.
+    On interactive terminals, cancel_key="x" enables Ctrl+X to stop this stage while
+    retaining its partial files and allowing the pipeline to continue.
     """
     print(f"\n[+] {name}\n    $ {' '.join(command)}", flush=True)
     started = time.monotonic()
@@ -1459,11 +1490,21 @@ def main() -> int:
         findings = out_dir / "nuclei-findings.jsonl"
         rc = run_step("Nuclei: template-based security checks",
                       ["nuclei", "-l", str(live_file), "-severity", args.severity,
-                       "-jsonl", "-no-color", "-o", str(findings)], out_dir / "nuclei.log")
-        status["stages"]["nuclei"] = rc
-        status["nuclei_exit_code"] = rc
-        if rc:
-            failures.append("nuclei")
+                       "-jsonl", "-no-color", "-o", str(findings)],
+                      out_dir / "nuclei.log", cancel_key="x")
+        if rc == 130:
+            status["stages"]["nuclei"] = {
+                "status": "cancelled by user",
+                "reason": "Ctrl+X pressed while Nuclei was running",
+                "partial_findings_file": str(findings),
+            }
+            status["nuclei_exit_code"] = 130
+            print("[+] Nuclei cancelled; continuing with remaining stages.", flush=True)
+        else:
+            status["stages"]["nuclei"] = rc
+            status["nuclei_exit_code"] = rc
+            if rc:
+                failures.append("nuclei")
 
     if args.no_screenshots:
         status["stages"]["gowitness"] = "skipped"
