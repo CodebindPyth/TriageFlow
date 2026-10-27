@@ -35,11 +35,12 @@ def recursive_subfinder(
     normalized_roots = list(dict.fromkeys(r.lower().strip().rstrip(".") for r in roots if r.strip()))
     known = {h.lower().strip().rstrip(".") for h in seed_hosts if is_in_scope(h, normalized_roots)}
     frontier = list(sorted(known))
+    initial_seed_count = len(known)
     discovered: list[str] = []
     audit: list[dict[str, object]] = []
 
     for depth in range(1, max_depth + 1):
-        if not frontier or len(known) >= max_hosts:
+        if not frontier or len(discovered) >= max_hosts:
             break
         input_file = out_dir / f"recursive-subfinder-depth-{depth}-input.txt"
         output_file = out_dir / f"recursive-subfinder-depth-{depth}.txt"
@@ -73,7 +74,7 @@ def recursive_subfinder(
                 wave.append(host)
 
         # Deterministic order keeps result files stable between runs.
-        wave = sorted(set(wave))[: max(0, max_hosts - len(known))]
+        wave = sorted(set(wave))[: max(0, max_hosts - len(discovered))]
         known.update(wave)
         discovered.extend(wave)
         frontier = wave
@@ -85,7 +86,7 @@ def recursive_subfinder(
     import json
     (out_dir / "recursive-subdomains.json").write_text(
         json.dumps({"max_depth": max_depth, "max_hosts": max_hosts,
-                    "roots": normalized_roots, "count": len(discovered), "waves": audit,
+                    "seed_hosts": initial_seed_count, "roots": normalized_roots, "count": len(discovered), "waves": audit,
                     "results": discovered}, indent=2),
         encoding="utf-8",
     )
