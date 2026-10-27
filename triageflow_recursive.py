@@ -48,9 +48,11 @@ def recursive_subfinder(
     if not normalized_roots:
         raise ValueError("at least one root domain is required")
     seed_set = {h.lower().strip().rstrip(".") for h in seed_hosts if is_in_scope(h, normalized_roots)}
-    known = set(seed_set)
     frontier = list(sorted(seed_set))
-    initial_seed_count = len(known)
+    initial_seed_count = len(seed_set)
+    discovered: list[str] = []
+    known = set(seed_set)
+    audit: list[dict[str, object]] = []
     discovered: list[str] = []
     audit: list[dict[str, object]] = []
 
