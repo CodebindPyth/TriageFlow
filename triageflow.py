@@ -864,6 +864,7 @@ def main() -> int:
     parser.add_argument("--recursive-subdomains", action="store_true", help="Recursively discover in-scope subdomains from discovered hosts")
     parser.add_argument("--recursive-depth", type=int, default=2, help="Maximum recursive discovery depth (1-5; default: 2)")
     parser.add_argument("--recursive-max-hosts", type=int, default=5000, help="Maximum unique subdomains discovered recursively (default: 5000)")
+    parser.add_argument("--recursive-timeout", type=int, default=120, help="Maximum seconds for each recursive Subfinder pass (default: 120)")
     parser.add_argument("--timeout", type=int, default=10, help="httpx timeout in seconds")
     parser.add_argument("--dns-threads", type=int, default=100,
                         help="Parallel dnsx threads for the custom wordlist (default: 100)")
@@ -968,6 +969,8 @@ def main() -> int:
         parser.error("--recursive-depth must be between 1 and 5")
     if args.recursive_max_hosts < 1:
         parser.error("--recursive-max-hosts must be at least 1")
+    if args.recursive_timeout < 10 or args.recursive_timeout > 900:
+        parser.error("--recursive-timeout must be between 10 and 900 seconds")
     if args.recursive_subdomains and args.no_subdomains:
         parser.error("--recursive-subdomains cannot be combined with --no-subdomains")
     if not 1 <= args.crawl_depth <= 5:
@@ -1240,6 +1243,7 @@ def main() -> int:
                     recursive_seeds, roots, out_dir,
                     max_depth=args.recursive_depth,
                     max_hosts=args.recursive_max_hosts,
+                    timeout=args.recursive_timeout,
                     all_sources=args.subfinder_all,
                 )
                 status["stages"]["recursive_subdomains"] = {
