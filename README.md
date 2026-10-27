@@ -209,6 +209,7 @@ Some stages send requests to the selected targets. Use them only within your aut
 | `--recursive-subdomains` | Run bounded recursive Subfinder passes on discovered subdomains. |
 | `--recursive-depth N` | Maximum recursive depth (1–5, default 2). |
 | `--recursive-max-hosts N` | Maximum unique recursive subdomains (default 5000). |
+| `--recursive-timeout N` | Timeout per recursive Subfinder pass in seconds (10–900, default 120). |
 | `--no-wordlist` | Disable automatic wordlist selection. |
 | `--vhost-fuzz` | Also try virtual-host discovery with ffuf. |
 | `--crawl-endpoints` | Enable bounded Katana crawling. |
