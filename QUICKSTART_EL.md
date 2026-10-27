@@ -93,6 +93,31 @@ python3 triageflow.py -u example.com --recursive-subdomains --recursive-depth 3 
 
 Το βάθος επιτρέπεται από 1 έως 5. Κάθε recursive πέρασμα έχει timeout 120 δευτερολέπτων από προεπιλογή (ρύθμισε το με `--recursive-timeout`, αποδεκτά 10–900 δευτερόλεπτα). Τα αρχεία `recursive-subdomains.txt`, `recursive-subdomains.json` και τα logs ανά βάθος αποθηκεύονται στον φάκελο του run. Η αναδρομική ανακάλυψη χρησιμοποιεί τις παθητικές πηγές του Subfinder· δεν εγγυάται ότι θα βρει κάθε subdomain. Τα ενεργά στάδια εκτελούν αιτήματα προς live hosts, γι' αυτό έλεγξε εκ των προτέρων ότι ολόκληρο το domain scope καλύπτεται από την εξουσιοδότησή σου. Η επιλογή δεν χρησιμοποιείται μαζί με `--no-subdomains`.
 
+### Directory discovery με ffuf σε όλα τα live subdomains
+
+Για να γίνεται directory discovery όχι μόνο στο αρχικό domain αλλά και σε όσα subdomains και nested subdomains έχουν βρεθεί και απαντούν σε HTTP/HTTPS, ενεργοποίησε το προαιρετικό στάδιο με δικό σου wordlist:
+
+```bash
+python3 triageflow.py \\
+  -u example.com \\
+  --recursive-subdomains \\
+  --dir-fuzz \\
+  --dir-wordlist /path/to/directory-wordlist.txt
+```
+
+Το `--dir-wordlist` είναι ξεχωριστό από το wordlist ανακάλυψης subdomains (`-w`). Το ffuf εκτελείται μία φορά ανά μοναδικό live origin που έχει καταγράψει το `httpx`, με URL της μορφής `https://host/FUZZ`. Το στάδιο είναι opt-in, οπότε δεν ξεκινά χωρίς `--dir-fuzz` και το ρητό path του directory wordlist. Πριν ξεκινήσει η σάρωση, το TriageFlow εξακολουθεί να απαιτεί την επιβεβαίωση `YES` για το scope.
+
+Προεπιλογές: 10 requests/δευτερόλεπτο, 10 threads, έως 60 δευτερόλεπτα ανά origin και timeout αιτήματος 10 δευτερόλεπτα. Μπορείς να τις αλλάξεις μέσα στα επιτρεπόμενα όρια:
+
+```bash
+python3 triageflow.py -u example.com \\
+  --recursive-subdomains \\
+  --dir-fuzz --dir-wordlist /path/to/directory-wordlist.txt \\
+  --dir-rate 10 --dir-threads 10 --dir-max-time 60 --dir-timeout 10
+```
+
+Τα συνολικά αποτελέσματα βρίσκονται στα `ffuf-directory-findings.csv` και `ffuf-directory-findings.json`. Για κάθε origin αποθηκεύονται επίσης ξεχωριστά JSON αποτελέσματα και logs στον φάκελο `ffuf-directory/`. Τα status codes ή οι διαδρομές που ανακαλύπτονται είναι υποψήφια ευρήματα και χρειάζονται χειροκίνητη επαλήθευση. Χρησιμοποίησε μόνο ένα wordlist κατάλληλο για το περιβάλλον και μόνο σε assets που είναι ρητά εντός scope.
+
 ## 3. Τι κάνει το κάθε στάδιο;
 
 | Στάδιο | Με απλά λόγια |
