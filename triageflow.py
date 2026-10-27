@@ -1024,7 +1024,7 @@ def main() -> int:
         required.append("nuclei")
     if not args.no_screenshots:
         required.append("gowitness")
-    if not args.no_subdomains and roots:
+    if (not args.no_subdomains and roots) or args.recursive_subdomains:
         required.append("subfinder")
     if wordlist and roots and not args.bruteforce_direct:
         required.append("dnsx")
