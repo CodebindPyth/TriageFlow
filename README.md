@@ -185,6 +185,7 @@ GitHub Actions also exercises Python 3.10, 3.11, 3.12 and 3.13.
 | Component | Role | Notes |
 |---|---|---|
 | Subfinder | Passive subdomain discovery | Optional to disable with `--no-subdomains`. |
+| Recursive Subfinder | Repeats passive discovery from discovered in-scope subdomains | Opt-in with `--recursive-subdomains`; bounded by `--recursive-depth` and `--recursive-max-hosts`. Results are filtered to the supplied root domains. |
 | dnsx + wordlist | Candidate subdomain resolution | Uses bounded timeout/retry settings and wildcard filtering. |
 | httpx | Live HTTP probing and technology detection | Main source of live URLs and web-service observations. |
 | NVD API | Candidate CVE enrichment | Keyword results and CPE hints require manual/vendor validation. |
@@ -205,6 +206,9 @@ Some stages send requests to the selected targets. Use them only within your aut
 | `-l FILE` | Read targets from a text file. |
 | `-w FILE` | Specify a custom wordlist. |
 | `--no-subdomains` | Skip Subfinder discovery. |
+| `--recursive-subdomains` | Run bounded recursive Subfinder passes on discovered subdomains. |
+| `--recursive-depth N` | Maximum recursive depth (1–5, default 2). |
+| `--recursive-max-hosts N` | Maximum unique recursive subdomains (default 5000). |
 | `--no-wordlist` | Disable automatic wordlist selection. |
 | `--vhost-fuzz` | Also try virtual-host discovery with ffuf. |
 | `--crawl-endpoints` | Enable bounded Katana crawling. |
