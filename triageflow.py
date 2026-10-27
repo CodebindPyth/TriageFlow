@@ -1223,7 +1223,7 @@ def main() -> int:
             status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains; use --vhost-fuzz to run both)"
 
     recursive_names: list[str] = []
-    if args.recursive_subdomains and roots and not args.no_subdomains:
+    if args.recursive_subdomains and roots:
         recursive_seeds = list(dict.fromkeys([*discovered, *wordlist_names]))
         if not recursive_seeds:
             print("[!] Recursive discovery requested, but the first discovery pass found no seeds.")
