@@ -470,6 +470,36 @@ def discover_vhosts(
                         rc = process.wait(timeout=10)
                         break
                     except subprocess.TimeoutExpired:
+                        if cancel_key and sys.stdin.isatty():
+                            try:
+                                import select
+                                import termios
+                                import tty
+
+                                fd = sys.stdin.fileno()
+                                old_settings = termios.tcgetattr(fd)
+                                try:
+                                    tty.setcbreak(fd)
+                                    ready, _, _ = select.select([sys.stdin], [], [], 0)
+                                    if ready and sys.stdin.read(1) == "\\x18":
+                                        print(
+                                            f"\\n[!] {name}: Ctrl+X pressed; terminating this stage "
+                                            "and preserving partial output.",
+                                            flush=True,
+                                        )
+                                        process.terminate()
+                                        try:
+                                            process.wait(timeout=3)
+                                        except subprocess.TimeoutExpired:
+                                            process.kill()
+                                            process.wait()
+                                        return_code = 130
+                                        break
+                                finally:
+                                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                            except (ImportError, OSError, ValueError):
+                                # Shortcut polling is best-effort; Ctrl+C remains supported.
+                                pass
                         elapsed = int(time.monotonic() - started)
                         print(
                             f"[+] ffuf is still checking virtual hosts ({elapsed}s elapsed); "
