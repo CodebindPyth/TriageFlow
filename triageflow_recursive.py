@@ -45,8 +45,9 @@ def recursive_subfinder(
         raise ValueError("max_hosts must be at least 1")
 
     normalized_roots = list(dict.fromkeys(r.lower().strip().rstrip(".") for r in roots if r.strip()))
-    known = {h.lower().strip().rstrip(".") for h in seed_hosts if is_in_scope(h, normalized_roots)}
-    frontier = list(sorted(known))
+    seed_set = {h.lower().strip().rstrip(".") for h in seed_hosts if is_in_scope(h, normalized_roots)}
+    known = set(seed_set)
+    frontier = list(sorted(seed_set))
     initial_seed_count = len(known)
     discovered: list[str] = []
     audit: list[dict[str, object]] = []
@@ -54,6 +55,7 @@ def recursive_subfinder(
     for depth in range(1, max_depth + 1):
         if not frontier or len(discovered) >= max_hosts:
             break
+        frontier = frontier[:max_hosts]
         input_file = out_dir / f"recursive-subfinder-depth-{depth}-input.txt"
         output_file = out_dir / f"recursive-subfinder-depth-{depth}.txt"
         log_file = out_dir / f"recursive-subfinder-depth-{depth}.log"
