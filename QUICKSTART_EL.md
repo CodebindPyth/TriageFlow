@@ -77,6 +77,22 @@ https://staging.example.com
 
 Πριν ξεκινήσει η σάρωση θα εμφανιστεί επιβεβαίωση. Πληκτρολόγησε ακριβώς `YES` μόνο αν οι στόχοι ανήκουν σε εσένα ή βρίσκονται σε ρητά εγκεκριμένο scope. Οτιδήποτε άλλο ακυρώνει τη σάρωση.
 
+### Recursive subdomain discovery
+
+Μπορείς προαιρετικά να κάνεις επιπλέον παθητικά περάσματα Subfinder πάνω στα subdomains που ήδη ανακαλύφθηκαν, ώστε να βρεθούν και nested ονόματα. Τα ευρήματα φιλτράρονται ώστε να ανήκουν στα root domains που έδωσες και μπαίνουν στο `all-targets.txt`. Όσα απαντούν σε HTTP/HTTPS περνούν μετά από τα ενεργοποιημένα στάδια του pipeline, όπως το software inventory, το login-panel review, το Nuclei και τα screenshots.
+
+```bash
+python3 triageflow.py -u example.com --recursive-subdomains
+```
+
+Από προεπιλογή, εκτελεί έως 2 recursive επίπεδα και κρατά έως 5.000 νέα subdomains. Μπορείς να ρυθμίσεις τα όρια:
+
+```bash
+python3 triageflow.py -u example.com --recursive-subdomains --recursive-depth 3 --recursive-max-hosts 3000
+```
+
+Το βάθος επιτρέπεται από 1 έως 5. Τα αρχεία `recursive-subdomains.txt`, `recursive-subdomains.json` και τα logs ανά βάθος αποθηκεύονται στον φάκελο του run. Η αναδρομική ανακάλυψη χρησιμοποιεί τις παθητικές πηγές του Subfinder· δεν εγγυάται ότι θα βρει κάθε subdomain. Τα ενεργά στάδια εκτελούν αιτήματα προς live hosts, γι' αυτό έλεγξε εκ των προτέρων ότι ολόκληρο το domain scope καλύπτεται από την εξουσιοδότησή σου. Η επιλογή δεν χρησιμοποιείται μαζί με `--no-subdomains`.
+
 ## 3. Τι κάνει το κάθε στάδιο;
 
 | Στάδιο | Με απλά λόγια |
