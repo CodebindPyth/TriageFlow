@@ -1246,10 +1246,10 @@ def main() -> int:
                 print(f"[WARN] Recursive subdomain discovery failed: {exc}", file=sys.stderr)
                 status["stages"]["recursive_subdomains"] = {"status": "failed", "error": str(exc)}
                 pipeline_failures.append("recursive subdomain discovery")
-    elif args.recursive_subdomains:
+    elif args.recursive_subdomains and not roots:
         status["stages"]["recursive_subdomains"] = {
             "status": "skipped",
-            "reason": "--no-subdomains was selected or no root domain was supplied",
+            "reason": "no root domain was supplied",
         }
 
     combined = combine_targets(direct, roots, wordlist_names, [*discovered, *recursive_names])
