@@ -32,6 +32,7 @@ from triageflow_reports import (
 from triageflow_map import generate_attack_surface_map
 from triageflow_ai import analyze_saved_results, build_evidence, write_markdown_report
 from triageflow_cgi import run_tomcat_cgi_check
+from triageflow_recursive import recursive_subfinder
 
 VERSION = "2.3.0"
 GO_BIN = Path.home() / "go" / "bin"
@@ -860,6 +861,9 @@ def main() -> int:
     parser.add_argument("--severity", default="medium,high,critical", help="Nuclei severities")
     parser.add_argument("--no-subdomains", action="store_true", help="Skip Subfinder")
     parser.add_argument("--subfinder-all", action="store_true", help="Use all configured Subfinder sources")
+    parser.add_argument("--recursive-subdomains", action="store_true", help="Recursively discover in-scope subdomains from discovered hosts")
+    parser.add_argument("--recursive-depth", type=int, default=2, help="Maximum recursive discovery depth (1-5; default: 2)")
+    parser.add_argument("--recursive-max-hosts", type=int, default=5000, help="Maximum unique subdomains discovered recursively (default: 5000)")
     parser.add_argument("--timeout", type=int, default=10, help="httpx timeout in seconds")
     parser.add_argument("--dns-threads", type=int, default=100,
                         help="Parallel dnsx threads for the custom wordlist (default: 100)")
@@ -960,6 +964,10 @@ def main() -> int:
         parser.error("--max-login-hosts must be at least 1")
     if args.max_cve_products < 1:
         parser.error("--max-cve-products must be at least 1")
+    if not 1 <= args.recursive_depth <= 5:
+        parser.error("--recursive-depth must be between 1 and 5")
+    if args.recursive_max_hosts < 1:
+        parser.error("--recursive-max-hosts must be at least 1")
     if not 1 <= args.crawl_depth <= 5:
         parser.error("--crawl-depth must be between 1 and 5")
     if not 1 <= args.crawl_rate <= 50:
@@ -1214,12 +1222,42 @@ def main() -> int:
         else:
             status["stages"]["vhost_fuzz"] = "not run (DNS or Subfinder already found subdomains; use --vhost-fuzz to run both)"
 
-    combined = combine_targets(direct, roots, wordlist_names, discovered)
+    recursive_names: list[str] = []
+    if args.recursive_subdomains and roots and not args.no_subdomains:
+        recursive_seeds = list(dict.fromkeys([*discovered, *wordlist_names]))
+        if not recursive_seeds:
+            print("[!] Recursive discovery requested, but the first discovery pass found no seeds.")
+            status["stages"]["recursive_subdomains"] = {"status": "completed", "found": 0, "reason": "no seed subdomains"}
+        else:
+            try:
+                recursive_names = recursive_subfinder(
+                    recursive_seeds, roots, out_dir,
+                    max_depth=args.recursive_depth,
+                    max_hosts=args.recursive_max_hosts,
+                    all_sources=args.subfinder_all,
+                )
+                status["stages"]["recursive_subdomains"] = {
+                    "status": "completed",
+                    "found": len(recursive_names),
+                    "max_depth": args.recursive_depth,
+                    "max_hosts": args.recursive_max_hosts,
+                }
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(f"[WARN] Recursive subdomain discovery failed: {exc}", file=sys.stderr)
+                status["stages"]["recursive_subdomains"] = {"status": "failed", "error": str(exc)}
+                pipeline_failures.append("recursive subdomain discovery")
+    elif args.recursive_subdomains:
+        status["stages"]["recursive_subdomains"] = {
+            "status": "skipped",
+            "reason": "--no-subdomains was selected or no root domain was supplied",
+        }
+
+    combined = combine_targets(direct, roots, wordlist_names, [*discovered, *recursive_names])
     if direct_bruteforce_candidates:
         combined = list(dict.fromkeys([*combined, *direct_bruteforce_candidates]))
     combined_file, live_file = out_dir / "all-targets.txt", out_dir / "live.txt"
     write_lines(combined_file, combined)
-    status["subdomain_count"] = len(set(discovered + wordlist_names + vhost_hosts))
+    status["subdomain_count"] = len(set(discovered + recursive_names + wordlist_names + vhost_hosts))
     status["target_count"] = len(combined)
 
     details_file = out_dir / "httpx-details.jsonl"
@@ -1281,7 +1319,7 @@ def main() -> int:
         }
         live_candidates = sorted(set(direct_bruteforce_candidates) & live_hosts)
         write_lines(out_dir / "wordlist-live.txt", live_candidates)
-        status["subdomain_count"] = len(set(discovered + wordlist_names + vhost_hosts + live_candidates))
+        status["subdomain_count"] = len(set(discovered + recursive_names + wordlist_names + vhost_hosts + live_candidates))
         status["stages"]["wordlist_direct"] = {
             "status": "completed",
             "candidates": len(direct_bruteforce_candidates),
