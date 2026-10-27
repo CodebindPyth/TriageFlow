@@ -334,47 +334,65 @@ def discover_wordlist(
         with log_path.open("a", encoding="utf-8", errors="replace") as log:
             process = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, text=True)
             started = time.monotonic()
+            cancel_enabled = False
+            cancel_fd = None
+            old_settings = None
+            select_module = None
+            termios_module = None
+            cancelled = False
+            last_reported = 0
+
+            # Ctrl+X is an optional, best-effort per-stage cancel shortcut on a TTY.
+            # Keep the terminal in cbreak mode only while dnsx is running, and always
+            # restore the user's original terminal settings below.
+            try:
+                import select as select_module
+                import termios as termios_module
+                import tty
+
+                if sys.stdin.isatty():
+                    cancel_fd = sys.stdin.fileno()
+                    old_settings = termios_module.tcgetattr(cancel_fd)
+                    tty.setcbreak(cancel_fd)
+                    cancel_enabled = True
+            except (ImportError, OSError, ValueError):
+                cancel_enabled = False
+
             try:
                 while True:
                     try:
-                        rc = process.wait(timeout=10)
+                        rc = process.wait(timeout=1 if cancel_enabled else 10)
                         break
                     except subprocess.TimeoutExpired:
-                        if cancel_key and sys.stdin.isatty():
+                        if cancel_enabled and select_module is not None:
                             try:
-                                import select
-                                import termios
-                                import tty
+                                ready, _, _ = select_module.select([sys.stdin], [], [], 0)
+                                if ready and sys.stdin.read(1) == "\x18":
+                                    print(
+                                        "\n[!] dnsx: Ctrl+X pressed; terminating this stage "
+                                        "and preserving partial output.",
+                                        flush=True,
+                                    )
+                                    process.terminate()
+                                    try:
+                                        process.wait(timeout=3)
+                                    except subprocess.TimeoutExpired:
+                                        process.kill()
+                                        process.wait()
+                                    rc = 130
+                                    cancelled = True
+                                    break
+                            except (OSError, ValueError):
+                                # Keyboard cancellation is best-effort; Ctrl+C still works.
+                                cancel_enabled = False
 
-                                fd = sys.stdin.fileno()
-                                old_settings = termios.tcgetattr(fd)
-                                try:
-                                    tty.setcbreak(fd)
-                                    ready, _, _ = select.select([sys.stdin], [], [], 0)
-                                    if ready and sys.stdin.read(1) == "\\x18":
-                                        print(
-                                            f"\\n[!] {name}: Ctrl+X pressed; terminating this stage "
-                                            "and preserving partial output.",
-                                            flush=True,
-                                        )
-                                        process.terminate()
-                                        try:
-                                            process.wait(timeout=3)
-                                        except subprocess.TimeoutExpired:
-                                            process.kill()
-                                            process.wait()
-                                        return_code = 130
-                                        break
-                                finally:
-                                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                            except (ImportError, OSError, ValueError):
-                                # Shortcut polling is best-effort; Ctrl+C remains supported.
-                                pass
                         elapsed = int(time.monotonic() - started)
-                        print(
-                            f"[+] dnsx is still resolving candidates ({elapsed}s elapsed); "
-                            f"diagnostics: {log_path}"
-                        )
+                        if elapsed - last_reported >= 10:
+                            print(
+                                f"[+] dnsx is still resolving candidates ({elapsed}s elapsed); "
+                                f"diagnostics: {log_path}"
+                            )
+                            last_reported = elapsed
             except KeyboardInterrupt:
                 process.terminate()
                 try:
@@ -383,10 +401,25 @@ def discover_wordlist(
                     process.kill()
                     process.wait()
                 raise
+            finally:
+                if old_settings is not None and termios_module is not None and cancel_fd is not None:
+                    try:
+                        termios_module.tcsetattr(cancel_fd, termios_module.TCSADRAIN, old_settings)
+                    except (OSError, ValueError):
+                        pass
+
     except OSError as exc:
         raise RuntimeError(
             f"Could not start dnsx: {exc}. Check that dnsx is installed and on PATH."
         ) from exc
+
+    if cancelled:
+        resolved = read_lines(resolved_path) if resolved_path.is_file() else []
+        print(
+            f"[!] dnsx stage cancelled with Ctrl+X; preserving {len(resolved)} partial result(s)."
+        )
+        print(f"[+] Partial candidate lists: {candidates_path} and {resolved_path}")
+        return resolved
 
     if rc != 0:
         raise RuntimeError(
