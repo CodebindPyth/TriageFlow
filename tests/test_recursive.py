@@ -16,6 +16,7 @@ class RecursiveSubdomainTests(unittest.TestCase):
         self.assertFalse(is_in_scope("notexample.test", ["example.test"]))
         self.assertFalse(is_in_scope("example.test.evil.test", ["example.test"]))
         self.assertFalse(is_in_scope("example.org", ["example.test"]))
+        self.assertFalse(is_in_scope("sub.example.test.evil.test", ["example.test"]))
 
     def test_case_and_trailing_dot_are_normalized(self):
         self.assertTrue(is_in_scope("API.Example.Test.", ["example.test"]))
