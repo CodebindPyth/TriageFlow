@@ -174,7 +174,7 @@ The current fixture contains five synthetic scenarios and ten expected classific
 Run the project's full test suite:
 
 ```bash
-python3 -m py_compile triageflow.py triageflow_enrichment.py triageflow_reports.py triageflow_map.py triageflow_ai.py triageflow_quality.py
+python3 -m py_compile triageflow.py triageflow_enrichment.py triageflow_reports.py triageflow_map.py triageflow_ai.py triageflow_quality.py triageflow_recursive.py triageflow_dirs.py
 python3 -m unittest discover -s tests -v
 ```
 
