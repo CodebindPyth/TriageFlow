@@ -16,7 +16,7 @@ def read_lines(path: Path) -> list[str]:
 
 
 def write_lines(path: Path, values: list[str]) -> None:
-    path.write_text("".join(f"{item}\\n" for item in dict.fromkeys(values)), encoding="utf-8")
+    path.write_text("".join(f"{item}\n" for item in dict.fromkeys(values)), encoding="utf-8")
 
 
 def is_in_scope(host: str, roots: list[str]) -> bool:
