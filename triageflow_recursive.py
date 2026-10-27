@@ -67,6 +67,7 @@ def recursive_subfinder(
         cmd = ["subfinder", "-dL", str(input_file), "-silent", "-o", str(output_file)]
         if all_sources:
             cmd.insert(1, "-all")
+        output_file.unlink(missing_ok=True)
         with log_file.open("w", encoding="utf-8", errors="replace") as log:
             log.write("COMMAND: " + " ".join(cmd) + "\n")
             try:
