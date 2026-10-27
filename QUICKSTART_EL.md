@@ -91,7 +91,7 @@ python3 triageflow.py -u example.com --recursive-subdomains
 python3 triageflow.py -u example.com --recursive-subdomains --recursive-depth 3 --recursive-max-hosts 3000
 ```
 
-Το βάθος επιτρέπεται από 1 έως 5. Τα αρχεία `recursive-subdomains.txt`, `recursive-subdomains.json` και τα logs ανά βάθος αποθηκεύονται στον φάκελο του run. Η αναδρομική ανακάλυψη χρησιμοποιεί τις παθητικές πηγές του Subfinder· δεν εγγυάται ότι θα βρει κάθε subdomain. Τα ενεργά στάδια εκτελούν αιτήματα προς live hosts, γι' αυτό έλεγξε εκ των προτέρων ότι ολόκληρο το domain scope καλύπτεται από την εξουσιοδότησή σου. Η επιλογή δεν χρησιμοποιείται μαζί με `--no-subdomains`.
+Το βάθος επιτρέπεται από 1 έως 5. Κάθε recursive πέρασμα έχει timeout 120 δευτερολέπτων από προεπιλογή (ρύθμισε το με `--recursive-timeout`, αποδεκτά 10–900 δευτερόλεπτα). Τα αρχεία `recursive-subdomains.txt`, `recursive-subdomains.json` και τα logs ανά βάθος αποθηκεύονται στον φάκελο του run. Η αναδρομική ανακάλυψη χρησιμοποιεί τις παθητικές πηγές του Subfinder· δεν εγγυάται ότι θα βρει κάθε subdomain. Τα ενεργά στάδια εκτελούν αιτήματα προς live hosts, γι' αυτό έλεγξε εκ των προτέρων ότι ολόκληρο το domain scope καλύπτεται από την εξουσιοδότησή σου. Η επιλογή δεν χρησιμοποιείται μαζί με `--no-subdomains`.
 
 ## 3. Τι κάνει το κάθε στάδιο;
 
