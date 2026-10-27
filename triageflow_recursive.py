@@ -32,6 +32,7 @@ def recursive_subfinder(
     *,
     max_depth: int = 2,
     max_hosts: int = 5000,
+    timeout: int = 120,
     all_sources: bool = False,
 ) -> list[str]:
     """Discover descendants in waves while enforcing root-domain scope and hard limits.
@@ -43,6 +44,8 @@ def recursive_subfinder(
         raise ValueError("max_depth must be between 1 and 5")
     if max_hosts < 1:
         raise ValueError("max_hosts must be at least 1")
+    if not 10 <= timeout <= 900:
+        raise ValueError("timeout must be between 10 and 900 seconds")
 
     normalized_roots = list(dict.fromkeys(r.lower().strip().rstrip(".") for r in roots if r.strip()))
     if not normalized_roots:
@@ -71,7 +74,11 @@ def recursive_subfinder(
         with log_file.open("w", encoding="utf-8", errors="replace") as log:
             log.write("COMMAND: " + " ".join(cmd) + "\n")
             try:
-                proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, check=False)
+                proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, check=False, timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    f"Subfinder recursion depth {depth} exceeded {timeout}s; inspect {log_file}"
+                ) from exc
             except OSError as exc:
                 raise RuntimeError(f"Could not start Subfinder at recursion depth {depth}: {exc}") from exc
         if proc.returncode != 0:
