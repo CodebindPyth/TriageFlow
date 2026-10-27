@@ -186,6 +186,7 @@ GitHub Actions also exercises Python 3.10, 3.11, 3.12 and 3.13.
 |---|---|---|
 | Subfinder | Passive subdomain discovery | Optional to disable with `--no-subdomains`. |
 | Recursive Subfinder | Repeats passive discovery from discovered in-scope subdomains | Opt-in with `--recursive-subdomains`; bounded by `--recursive-depth` and `--recursive-max-hosts`. Results are filtered to the supplied root domains. |
+| ffuf directory discovery | Finds candidate paths on each live HTTP(S) origin | Explicit opt-in with `--dir-fuzz --dir-wordlist FILE`; request rate, threads and per-origin time are bounded. |
 | dnsx + wordlist | Candidate subdomain resolution | Uses bounded timeout/retry settings and wildcard filtering. |
 | httpx | Live HTTP probing and technology detection | Main source of live URLs and web-service observations. |
 | NVD API | Candidate CVE enrichment | Keyword results and CPE hints require manual/vendor validation. |
@@ -210,6 +211,11 @@ Some stages send requests to the selected targets. Use them only within your aut
 | `--recursive-depth N` | Maximum recursive depth (1–5, default 2). |
 | `--recursive-max-hosts N` | Maximum unique recursive subdomains (default 5000). |
 | `--recursive-timeout N` | Timeout per recursive Subfinder pass in seconds (10–900, default 120). |
+| `--dir-fuzz --dir-wordlist FILE` | Run ffuf directory discovery against each unique live HTTP(S) origin from `live.txt`. |
+| `--dir-rate N` | ffuf request rate, 1–100 requests/second (default 10). |
+| `--dir-threads N` | ffuf threads, 1–50 (default 10). |
+| `--dir-max-time N` | Maximum time per origin in seconds, 5–600 (default 60). |
+| `--dir-timeout N` | Per-request timeout in seconds, 1–30 (default 10). |
 | `--no-wordlist` | Disable automatic wordlist selection. |
 | `--vhost-fuzz` | Also try virtual-host discovery with ffuf. |
 | `--crawl-endpoints` | Enable bounded Katana crawling. |
@@ -222,6 +228,8 @@ Some stages send requests to the selected targets. Use them only within your aut
 | `--help` | Show all CLI options. |
 
 For direct virtual-host discovery without DNS pre-resolution, see `vhost_direct.py` and the detailed instructions in the [Greek guide](QUICKSTART_EL.md).
+
+Example: `python3 triageflow.py -u example.com --recursive-subdomains --dir-fuzz --dir-wordlist /path/to/directory-wordlist.txt`. Directory discovery is opt-in and runs only on live URLs discovered for the authorized target scope. Results are saved in `ffuf-directory-findings.csv`, `ffuf-directory-findings.json`, and per-origin JSON/log files.
 
 ## Safety, privacy and limitations
 
