@@ -5,7 +5,18 @@ import re
 import subprocess
 from pathlib import Path
 
-from triageflow import read_lines, write_lines
+def read_lines(path: Path) -> list[str]:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def write_lines(path: Path, values: list[str]) -> None:
+    path.write_text("".join(f"{item}\\n" for item in dict.fromkeys(values)), encoding="utf-8")
 
 
 def is_in_scope(host: str, roots: list[str]) -> bool:
