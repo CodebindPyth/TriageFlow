@@ -5,6 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
+
 def read_lines(path: Path) -> list[str]:
     if not path.is_file():
         raise FileNotFoundError(path)
