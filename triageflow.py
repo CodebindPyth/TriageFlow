@@ -968,6 +968,8 @@ def main() -> int:
         parser.error("--recursive-depth must be between 1 and 5")
     if args.recursive_max_hosts < 1:
         parser.error("--recursive-max-hosts must be at least 1")
+    if args.recursive_subdomains and args.no_subdomains:
+        parser.error("--recursive-subdomains cannot be combined with --no-subdomains")
     if not 1 <= args.crawl_depth <= 5:
         parser.error("--crawl-depth must be between 1 and 5")
     if not 1 <= args.crawl_rate <= 50:
