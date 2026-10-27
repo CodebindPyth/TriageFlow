@@ -33,6 +33,7 @@ from triageflow_map import generate_attack_surface_map
 from triageflow_ai import analyze_saved_results, build_evidence, write_markdown_report
 from triageflow_cgi import run_tomcat_cgi_check
 from triageflow_recursive import recursive_subfinder
+from triageflow_dirs import run_directory_ffuf
 
 VERSION = "2.3.0"
 GO_BIN = Path.home() / "go" / "bin"
@@ -878,6 +879,12 @@ def main() -> int:
                         help="Maximum ffuf virtual-host requests per second (default: 100)")
     parser.add_argument("--vhost-max-time", type=int, default=120,
                         help="Maximum seconds per root domain for virtual-host discovery (default: 120)")
+    parser.add_argument("--dir-fuzz", action="store_true", help="Opt in to bounded ffuf directory discovery on all live HTTP(S) origins")
+    parser.add_argument("--dir-wordlist", help="Wordlist for --dir-fuzz, one path per line")
+    parser.add_argument("--dir-rate", type=int, default=10, help="ffuf directory requests per second (1-100; default: 10)")
+    parser.add_argument("--dir-threads", type=int, default=10, help="ffuf directory threads (1-50; default: 10)")
+    parser.add_argument("--dir-max-time", type=int, default=60, help="Maximum ffuf seconds per origin (5-600; default: 60)")
+    parser.add_argument("--dir-timeout", type=int, default=10, help="ffuf per-request timeout in seconds (1-30; default: 10)")
     parser.add_argument("--no-nuclei", action="store_true", help="Skip Nuclei")
     parser.add_argument("--no-screenshots", action="store_true", help="Skip GoWitness")
     parser.add_argument("--no-login-check", action="store_true",
@@ -916,6 +923,18 @@ def main() -> int:
         parser.error("--bruteforce-direct requires a wordlist, not --no-wordlist")
     if args.bruteforce_rate < 1:
         parser.error("--bruteforce-rate must be at least 1")
+    if args.dir_fuzz and not args.dir_wordlist:
+        parser.error("--dir-fuzz requires --dir-wordlist")
+    if args.dir_wordlist and not args.dir_fuzz:
+        parser.error("--dir-wordlist requires --dir-fuzz")
+    if not 1 <= args.dir_rate <= 100:
+        parser.error("--dir-rate must be between 1 and 100")
+    if not 1 <= args.dir_threads <= 50:
+        parser.error("--dir-threads must be between 1 and 50")
+    if not 5 <= args.dir_max_time <= 600:
+        parser.error("--dir-max-time must be between 5 and 600")
+    if not 1 <= args.dir_timeout <= 30:
+        parser.error("--dir-timeout must be between 1 and 30")
     if args.wizard and (args.list or args.single_target):
         parser.error("--wizard cannot be combined with --url or --list")
     if wizard_mode:
@@ -1006,6 +1025,10 @@ def main() -> int:
     roots = list(dict.fromkeys(roots))
 
     wordlist = Path(args.wordlist).expanduser().resolve() if args.wordlist else None
+    dir_wordlist = Path(args.dir_wordlist).expanduser().resolve() if args.dir_wordlist else None
+    if dir_wordlist and not dir_wordlist.is_file():
+        print(f"[ERROR] Directory wordlist does not exist: {dir_wordlist}", file=sys.stderr)
+        return 2
     if wordlist and not wordlist.is_file():
         print(f"[ERROR] Wordlist does not exist: {wordlist}", file=sys.stderr)
         return 2
@@ -1033,7 +1056,7 @@ def main() -> int:
         required.append("subfinder")
     if wordlist and roots and not args.bruteforce_direct:
         required.append("dnsx")
-    if args.vhost_fuzz:
+    if args.vhost_fuzz or args.dir_fuzz:
         required.append("ffuf")
     missing = ensure_tools(required)
     if missing:
@@ -1298,6 +1321,30 @@ def main() -> int:
     assets = write_asset_inventory(httpx_records, out_dir / "asset-inventory.csv")
     fingerprints = write_software_inventory(httpx_records, out_dir / "software-inventory.csv")
 
+    if not args.dir_fuzz:
+        status["stages"]["dir_fuzz"] = "not enabled (use --dir-fuzz --dir-wordlist PATH)"
+    elif not live:
+        status["stages"]["dir_fuzz"] = "not run: httpx returned no live URLs"
+    else:
+        try:
+            dir_summary = run_directory_ffuf(
+                live, dir_wordlist, out_dir,
+                rate=args.dir_rate,
+                threads=args.dir_threads,
+                max_time=args.dir_max_time,
+                timeout=args.dir_timeout,
+            )
+            status["dir_fuzz_finding_count"] = dir_summary.get("findings", 0)
+            status["stages"]["dir_fuzz"] = {
+                key: value for key, value in dir_summary.items() if key not in {"hosts", "errors"}
+            }
+            if dir_summary.get("status") != "completed":
+                pipeline_failures.append("directory ffuf")
+        except (OSError, RuntimeError, ValueError) as exc:
+            status["stages"]["dir_fuzz"] = {"status": "failed", "error": str(exc)}
+            print(f"[WARN] ffuf directory discovery failed: {exc}", file=sys.stderr)
+            pipeline_failures.append("directory ffuf")
+
     if args.no_tomcat_cgi_check:
         status["stages"]["tomcat_cgi_check"] = {
             "status": "skipped", "reason": "disabled with --no-tomcat-cgi-check"
@@ -1347,6 +1394,8 @@ def main() -> int:
         status["stages"]["katana"] = (
             "not run: httpx returned no live URLs" if args.crawl_endpoints else "not enabled"
         )
+        if args.dir_fuzz:
+            status["stages"]["dir_fuzz"] = "not run: httpx returned no live URLs"
         save_report(out_dir, status)
         return 1 if pipeline_failures else 0
 
